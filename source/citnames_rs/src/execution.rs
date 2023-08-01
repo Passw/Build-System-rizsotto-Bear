@@ -17,12 +17,17 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- */
+use std::collections::HashMap;
+use std::path::PathBuf;
 
-mod configuration;
-mod execution;
-mod semantic;
+struct SessionLocator(String);
+struct ReporterId(u64);
+struct ProcessId(u32);
 
-extern crate core;
-
+#[derive(Debug, PartialEq)]
+struct Execution {
+    executable: PathBuf,
+    arguments: Vec<String>,
+    working_dir: PathBuf,
+    environment: HashMap<String, String>,
+}
