@@ -17,14 +17,13 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- */
+use crate::execution::Execution;
+use crate::tools::{RecognitionResult, Tool};
 
-extern crate core;
-#[macro_use]
-extern crate lazy_static;
+struct Wrapper {}
 
-mod configuration;
-mod execution;
-mod semantic;
-mod tools;
+impl Tool for Wrapper {
+    fn recognize(&self, x: &Execution) -> RecognitionResult {
+        todo!()
+    }
+}

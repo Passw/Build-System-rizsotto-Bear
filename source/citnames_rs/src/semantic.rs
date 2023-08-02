@@ -25,14 +25,13 @@ use thiserror::Error;
 
 /// Represents an executed command semantic.
 #[derive(Debug, PartialEq)]
-enum Semantic {
-    Unknown,
+pub(crate) enum Semantic {
     Compiler(CompilerCall),
 }
 
 /// Represents a compiler call.
 #[derive(Debug, PartialEq)]
-enum CompilerCall {
+pub(crate) enum CompilerCall {
     Query,
     Preprocess,
     Compile {
@@ -45,7 +44,7 @@ enum CompilerCall {
 }
 
 #[derive(Error, Debug)]
-enum Error {
+pub(crate) enum Error {
     #[error("IO error")]
     IoError(#[from] std::io::Error),
     #[error("encode error")]

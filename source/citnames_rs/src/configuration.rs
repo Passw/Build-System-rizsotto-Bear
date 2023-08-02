@@ -25,7 +25,7 @@ use thiserror::Error;
 /// Represents how the duplicate filtering detects duplicate entries.
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(try_from = "String")]
-enum DuplicateFilterFields {
+pub(crate) enum DuplicateFilterFields {
     FileOnly,
     FileAndOutputOnly,
     All,
@@ -56,11 +56,11 @@ impl TryFrom<String> for DuplicateFilterFields {
 // of strings or a single string (shell escaping to protect white spaces).
 // Another format element is if the output field is emitted or not.
 #[derive(Debug, Deserialize, PartialEq)]
-struct Format {
+pub(crate) struct Format {
     // will default to true
-    command_as_array: Option<bool>,
+    pub command_as_array: Option<bool>,
     // will default to false
-    drop_output_field: Option<bool>,
+    pub drop_output_field: Option<bool>,
 }
 
 // Controls the content of the output.
@@ -69,21 +69,21 @@ struct Format {
 // These attributes can be read from the configuration file, and can be
 // overridden by command line arguments.
 #[derive(Debug, Deserialize, PartialEq)]
-struct Content {
+pub(crate) struct Content {
     // will default to false
-    include_only_existing_source: Option<bool>,
-    duplicate_filter_fields: Option<DuplicateFilterFields>,
+    pub include_only_existing_source: Option<bool>,
+    pub duplicate_filter_fields: Option<DuplicateFilterFields>,
     #[serde(default)]
-    paths_to_include: Vec<PathBuf>,
+    pub paths_to_include: Vec<PathBuf>,
     #[serde(default)]
-    paths_to_exclude: Vec<PathBuf>,
+    pub paths_to_exclude: Vec<PathBuf>,
 }
 
 // Groups together the output related configurations.
 #[derive(Debug, Deserialize, PartialEq)]
-struct Output {
-    format: Option<Format>,
-    content: Option<Content>,
+pub(crate) struct Output {
+    pub format: Option<Format>,
+    pub content: Option<Content>,
 }
 
 // Represents a compiler wrapper that the tool will recognize.
@@ -92,34 +92,34 @@ struct Output {
 // be a known compiler, and append the additional flags to the output
 // entry if the compiler is recognized.
 #[derive(Debug, Deserialize, PartialEq)]
-struct CompilerWrapper {
-    executable: PathBuf,
+pub(crate) struct CompilerToRecognize {
+    pub executable: PathBuf,
     #[serde(default)]
-    flags_to_add: Vec<String>,
+    pub flags_to_add: Vec<String>,
     #[serde(default)]
-    flags_to_remove: Vec<String>,
+    pub flags_to_remove: Vec<String>,
 }
 
 // Represents compiler related configuration.
 #[derive(Debug, Deserialize, PartialEq)]
-struct Compilation {
+pub(crate) struct Compilation {
     #[serde(default)]
-    compilers_to_recognize: Vec<CompilerWrapper>,
+    pub compilers_to_recognize: Vec<CompilerToRecognize>,
     #[serde(default)]
-    compilers_to_exclude: Vec<PathBuf>,
+    pub compilers_to_exclude: Vec<PathBuf>,
 }
 
 // Represents the application configuration.
 #[derive(Debug, Deserialize, PartialEq)]
-struct Configuration {
-    output: Option<Output>,
-    compilation: Option<Compilation>,
+pub(crate) struct Configuration {
+    pub output: Option<Output>,
+    pub compilation: Option<Compilation>,
 }
 
 
 /// This error type encompasses any error that can be returned by this module.
 #[derive(Error, Debug)]
-enum Error {
+pub(crate) enum Error {
     #[error("IO error")]
     IoError(#[from] std::io::Error),
     #[error("Syntax error")]
@@ -127,7 +127,7 @@ enum Error {
 }
 
 /// Load the content of the given file and parse it as Configuration.
-fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
+pub(crate) fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
     let reader = std::fs::OpenOptions::new().read(true).open(file)?;
     let result = from_reader(reader)?;
 
@@ -135,7 +135,7 @@ fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
 }
 
 /// Load the content of the given stream and parse it as Configuration.
-fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {
+pub(crate) fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {
     serde_json::from_reader(reader)
 }
 
@@ -196,7 +196,7 @@ mod test {
             compilation: Some(
                 Compilation {
                     compilers_to_recognize: vec![
-                        CompilerWrapper {
+                        CompilerToRecognize {
                             executable: PathBuf::from("/usr/local/bin/clang"),
                             flags_to_add: vec![String::from("-Dfoo=bar")],
                             flags_to_remove: vec![String::from("-Wall")],
@@ -275,12 +275,12 @@ mod test {
             compilation: Some(
                 Compilation {
                     compilers_to_recognize: vec![
-                        CompilerWrapper {
+                        CompilerToRecognize {
                             executable: PathBuf::from("/usr/local/bin/clang"),
                             flags_to_add: vec![],
                             flags_to_remove: vec![],
                         },
-                        CompilerWrapper {
+                        CompilerToRecognize {
                             executable: PathBuf::from("/usr/local/bin/clang++"),
                             flags_to_add: vec![],
                             flags_to_remove: vec![],

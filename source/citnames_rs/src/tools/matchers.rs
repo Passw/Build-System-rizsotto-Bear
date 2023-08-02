@@ -17,14 +17,4 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- */
-
-extern crate core;
-#[macro_use]
-extern crate lazy_static;
-
-mod configuration;
-mod execution;
-mod semantic;
-mod tools;
+pub(crate) mod source;

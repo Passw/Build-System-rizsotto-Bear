@@ -17,14 +17,26 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- */
+use std::path::PathBuf;
 
-extern crate core;
-#[macro_use]
-extern crate lazy_static;
+use crate::execution::Execution;
+use crate::tools::{RecognitionResult, Tool};
+use crate::tools::RecognitionResult::NotRecognized;
 
-mod configuration;
-mod execution;
-mod semantic;
-mod tools;
+struct ExcludeOr {
+    excludes: Vec<PathBuf>,
+    or: Box<dyn Tool>,
+}
+
+impl Tool for ExcludeOr {
+    /// Check if the executable is on the exclude list, return as not recognized.
+    /// Otherwise delegate the recognition to the tool given.
+    fn recognize(&self, x: &Execution) -> RecognitionResult {
+        for exclude in &self.excludes {
+            if &x.executable == exclude {
+                return NotRecognized;
+            }
+        }
+        return self.or.recognize(x);
+    }
+}

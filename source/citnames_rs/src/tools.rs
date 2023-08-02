@@ -17,14 +17,38 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*!
- */
+use thiserror::Error;
 
-extern crate core;
-#[macro_use]
-extern crate lazy_static;
+use crate::configuration::Configuration;
+use crate::execution::Execution;
+use crate::semantic::Semantic;
 
-mod configuration;
-mod execution;
-mod semantic;
-mod tools;
+mod any;
+mod exclude_or;
+mod configured;
+mod wrapper;
+mod matchers;
+
+#[derive(Error, Debug, PartialEq)]
+pub(crate) enum Error {
+    #[error("Executable not recognized")]
+    ExecutableFailure,
+    #[error("Argument not recognized")]
+    ArgumentFailure,
+    #[error("Source file not found")]
+    SourceNotFound,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum RecognitionResult {
+    Recognized(Result<Semantic, Error>),
+    NotRecognized,
+}
+
+trait Tool {
+    fn recognize(&self, _: &Execution) -> RecognitionResult;
+}
+
+fn init_from(cfg: Configuration) -> Box<dyn Tool> {
+    todo!()
+}

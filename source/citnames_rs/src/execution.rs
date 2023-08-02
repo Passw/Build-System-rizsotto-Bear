@@ -27,9 +27,9 @@ struct ReporterId(u64);
 struct ProcessId(u32);
 
 #[derive(Debug, PartialEq)]
-struct Execution {
-    executable: PathBuf,
-    arguments: Vec<String>,
-    working_dir: PathBuf,
-    environment: HashMap<String, String>,
+pub struct Execution {
+    pub executable: PathBuf,
+    pub arguments: Vec<String>,
+    pub working_dir: PathBuf,
+    pub environment: HashMap<String, String>,
 }
