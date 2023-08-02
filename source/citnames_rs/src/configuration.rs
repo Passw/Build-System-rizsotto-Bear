@@ -18,8 +18,9 @@
  */
 
 use std::path::PathBuf;
-use thiserror::Error;
+
 use serde::Deserialize;
+use thiserror::Error;
 
 /// Represents how the duplicate filtering detects duplicate entries.
 #[derive(Debug, Deserialize, PartialEq)]
@@ -283,7 +284,7 @@ mod test {
                             executable: PathBuf::from("/usr/local/bin/clang++"),
                             flags_to_add: vec![],
                             flags_to_remove: vec![],
-                        }
+                        },
                     ],
                     compilers_to_exclude: vec![PathBuf::from("clang"), PathBuf::from("clang++")],
                 }

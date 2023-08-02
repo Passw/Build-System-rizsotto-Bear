@@ -20,9 +20,8 @@
 /*!
  */
 
+extern crate core;
+
 mod configuration;
 mod execution;
 mod semantic;
-
-extern crate core;
-

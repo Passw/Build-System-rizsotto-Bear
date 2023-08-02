@@ -18,9 +18,10 @@
  */
 
 use std::path::{Path, PathBuf};
+
 use json_compilation_db::Entry;
-use thiserror::Error;
 use path_absolutize::Absolutize;
+use thiserror::Error;
 
 /// Represents an executed command semantic.
 #[derive(Debug, PartialEq)]
@@ -56,7 +57,7 @@ impl TryFrom<CompilerCall> for Vec<Entry> {
 
     fn try_from(value: CompilerCall) -> Result<Self, Self::Error> {
         match value {
-            CompilerCall::Compile { working_dir, compiler, flags, sources, output } => {
+            CompilerCall::Compile { working_dir, compiler, flags, sources, output } =>
                 sources.iter()
                     .map(|source| -> Result<Entry, Self::Error> {
                         let mut arguments: Vec<String> = vec![];
@@ -80,8 +81,7 @@ impl TryFrom<CompilerCall> for Vec<Entry> {
                             }
                         )
                     })
-                    .collect()
-            }
+                    .collect(),
             _ =>
                 Ok(vec![]),
         }
@@ -179,8 +179,8 @@ mod test {
                     .iter()
                     .map(|s| s.to_string())
                     .collect(),
-                output: None
-            }
+                output: None,
+            },
         ];
 
         let result: Vec<Entry> = input.try_into()?;

@@ -21,7 +21,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 struct SessionLocator(String);
+
 struct ReporterId(u64);
+
 struct ProcessId(u32);
 
 #[derive(Debug, PartialEq)]
