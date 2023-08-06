@@ -22,32 +22,42 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use thiserror::Error;
 
-/// Represents how the duplicate filtering detects duplicate entries.
+// Represents the application configuration.
 #[derive(Debug, Deserialize, PartialEq)]
-#[serde(try_from = "String")]
-pub(crate) enum DuplicateFilterFields {
-    FileOnly,
-    FileAndOutputOnly,
-    All,
+pub(crate) struct Configuration {
+    pub output: Option<Output>,
+    pub compilation: Option<Compilation>,
 }
 
-impl TryFrom<String> for DuplicateFilterFields {
-    type Error = String;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "file" =>
-                Ok(DuplicateFilterFields::FileOnly),
-            "file_output" =>
-                Ok(DuplicateFilterFields::FileAndOutputOnly),
-            "all" =>
-                Ok(DuplicateFilterFields::All),
-            _ =>
-                Err(format!(r#"Unknown value "{value}" for duplicate filter"#)),
-        }
-    }
+// Represents compiler related configuration.
+#[derive(Debug, Deserialize, PartialEq)]
+pub(crate) struct Compilation {
+    #[serde(default)]
+    pub compilers_to_recognize: Vec<CompilerToRecognize>,
+    #[serde(default)]
+    pub compilers_to_exclude: Vec<PathBuf>,
 }
 
+// Represents a compiler wrapper that the tool will recognize.
+//
+// When executable name matches it tries to parse the flags as it would
+// be a known compiler, and append the additional flags to the output
+// entry if the compiler is recognized.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub(crate) struct CompilerToRecognize {
+    pub executable: PathBuf,
+    #[serde(default)]
+    pub flags_to_add: Vec<String>,
+    #[serde(default)]
+    pub flags_to_remove: Vec<String>,
+}
+
+// Groups together the output related configurations.
+#[derive(Debug, Deserialize, PartialEq)]
+pub(crate) struct Output {
+    pub format: Option<Format>,
+    pub content: Option<Content>,
+}
 
 // Controls the output format.
 //
@@ -79,41 +89,30 @@ pub(crate) struct Content {
     pub paths_to_exclude: Vec<PathBuf>,
 }
 
-// Groups together the output related configurations.
+/// Represents how the duplicate filtering detects duplicate entries.
 #[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Output {
-    pub format: Option<Format>,
-    pub content: Option<Content>,
+#[serde(try_from = "String")]
+pub(crate) enum DuplicateFilterFields {
+    FileOnly,
+    FileAndOutputOnly,
+    All,
 }
 
-// Represents a compiler wrapper that the tool will recognize.
-//
-// When executable name matches it tries to parse the flags as it would
-// be a known compiler, and append the additional flags to the output
-// entry if the compiler is recognized.
-#[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct CompilerToRecognize {
-    pub executable: PathBuf,
-    #[serde(default)]
-    pub flags_to_add: Vec<String>,
-    #[serde(default)]
-    pub flags_to_remove: Vec<String>,
-}
+impl TryFrom<String> for DuplicateFilterFields {
+    type Error = String;
 
-// Represents compiler related configuration.
-#[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Compilation {
-    #[serde(default)]
-    pub compilers_to_recognize: Vec<CompilerToRecognize>,
-    #[serde(default)]
-    pub compilers_to_exclude: Vec<PathBuf>,
-}
-
-// Represents the application configuration.
-#[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Configuration {
-    pub output: Option<Output>,
-    pub compilation: Option<Compilation>,
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "file" =>
+                Ok(DuplicateFilterFields::FileOnly),
+            "file_output" =>
+                Ok(DuplicateFilterFields::FileAndOutputOnly),
+            "all" =>
+                Ok(DuplicateFilterFields::All),
+            _ =>
+                Err(format!(r#"Unknown value "{value}" for duplicate filter"#)),
+        }
+    }
 }
 
 

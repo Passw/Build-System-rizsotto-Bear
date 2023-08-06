@@ -22,13 +22,26 @@ use std::path::PathBuf;
 use crate::configuration::CompilerToRecognize;
 use crate::execution::Execution;
 use crate::semantic::{CompilerCall, Semantic};
-use crate::tools::{RecognitionResult, Tool};
+use crate::tools::{Any, RecognitionResult, Tool};
 use crate::tools::Error::SourceNotFound;
 use crate::tools::matchers::source::looks_like_a_source_file;
 use crate::tools::RecognitionResult::{NotRecognized, Recognized};
 
-struct Configured {
+pub(crate) struct Configured {
     config: CompilerToRecognize,
+}
+
+impl Configured {
+    pub(crate) fn new(config: CompilerToRecognize) -> Self {
+        Configured { config }
+    }
+
+    pub(crate) fn from(configs: &[CompilerToRecognize]) -> impl Tool {
+        let tools: Vec<Box<dyn Tool>> = configs.into_iter()
+            .map(|config| -> Box<dyn Tool> { Box::new(Configured::new(config.clone())) })
+            .collect();
+        Any { tools }
+    }
 }
 
 impl Tool for Configured {

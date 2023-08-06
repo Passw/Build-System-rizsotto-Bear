@@ -20,10 +20,16 @@
 use crate::execution::Execution;
 use crate::tools::{RecognitionResult, Tool};
 
-struct Wrapper {}
+pub(crate) struct Wrapper {}
+
+impl Wrapper {
+    pub(crate) fn new() -> Self {
+        Wrapper {}
+    }
+}
 
 impl Tool for Wrapper {
-    fn recognize(&self, x: &Execution) -> RecognitionResult {
+    fn recognize(&self, _: &Execution) -> RecognitionResult {
         todo!()
     }
 }
