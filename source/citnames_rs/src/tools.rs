@@ -23,7 +23,6 @@ use thiserror::Error;
 
 use crate::configuration::Compilation;
 use crate::execution::Execution;
-use crate::semantic::Semantic;
 use crate::tools::configured::Configured;
 use crate::tools::RecognitionResult::{NotRecognized, Recognized};
 use crate::tools::wrapper::Wrapper;
@@ -43,6 +42,26 @@ pub(crate) trait Tool {
 pub(crate) enum RecognitionResult {
     Recognized(Result<Semantic, Error>),
     NotRecognized,
+}
+
+/// Represents an executed command semantic.
+#[derive(Debug, PartialEq)]
+pub(crate) enum Semantic {
+    Compiler(CompilerCall),
+}
+
+/// Represents a compiler call.
+#[derive(Debug, PartialEq)]
+pub(crate) enum CompilerCall {
+    Query,
+    Preprocess,
+    Compile {
+        working_dir: PathBuf,
+        compiler: PathBuf,
+        flags: Vec<String>,
+        sources: Vec<PathBuf>,
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -99,8 +118,7 @@ mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
 
-    use crate::semantic::CompilerCall::Query;
-    use crate::semantic::Semantic;
+    use crate::tools::CompilerCall::Query;
     use crate::tools::test::MockTool::Recognize;
 
     use super::*;
@@ -233,7 +251,7 @@ fn init_from(config: Option<Compilation>) -> Box<dyn Tool> {
     if let Some(compilation) = config {
         // The hinted tools should be the first to recognize.
         if !compilation.compilers_to_recognize.is_empty() {
-            let configured = Configured::from(compilation.compilers_to_recognize.as_slice());
+            let configured = Configured::from(compilation.compilers_to_recognize);
             tools.insert(0, Box::new(configured))
         }
         // Excluded compiler check should be done before anything.

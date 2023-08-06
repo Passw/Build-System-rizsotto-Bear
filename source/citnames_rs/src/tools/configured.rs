@@ -21,7 +21,7 @@ use std::path::PathBuf;
 
 use crate::configuration::CompilerToRecognize;
 use crate::execution::Execution;
-use crate::semantic::{CompilerCall, Semantic};
+use crate::tools::{CompilerCall, Semantic};
 use crate::tools::{Any, RecognitionResult, Tool};
 use crate::tools::Error::SourceNotFound;
 use crate::tools::matchers::source::looks_like_a_source_file;
@@ -36,9 +36,9 @@ impl Configured {
         Configured { config }
     }
 
-    pub(crate) fn from(configs: &[CompilerToRecognize]) -> impl Tool {
+    pub(crate) fn from(configs: Vec<CompilerToRecognize>) -> impl Tool {
         let tools: Vec<Box<dyn Tool>> = configs.into_iter()
-            .map(|config| -> Box<dyn Tool> { Box::new(Configured::new(config.clone())) })
+            .map(|config| -> Box<dyn Tool> { Box::new(Configured::new(config)) })
             .collect();
         Any { tools }
     }
@@ -92,8 +92,7 @@ impl Tool for Configured {
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
-
-    use crate::semantic::Semantic::Compiler;
+    use crate::tools::Semantic::Compiler;
 
     use super::*;
 

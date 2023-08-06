@@ -26,5 +26,5 @@ extern crate lazy_static;
 
 mod configuration;
 mod execution;
-mod semantic;
+mod compilation;
 mod tools;

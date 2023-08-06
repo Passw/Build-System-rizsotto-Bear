@@ -22,26 +22,7 @@ use std::path::{Path, PathBuf};
 use json_compilation_db::Entry;
 use path_absolutize::Absolutize;
 use thiserror::Error;
-
-/// Represents an executed command semantic.
-#[derive(Debug, PartialEq)]
-pub(crate) enum Semantic {
-    Compiler(CompilerCall),
-}
-
-/// Represents a compiler call.
-#[derive(Debug, PartialEq)]
-pub(crate) enum CompilerCall {
-    Query,
-    Preprocess,
-    Compile {
-        working_dir: PathBuf,
-        compiler: PathBuf,
-        flags: Vec<String>,
-        sources: Vec<PathBuf>,
-        output: Option<PathBuf>,
-    },
-}
+use crate::tools::CompilerCall;
 
 #[derive(Error, Debug)]
 pub(crate) enum Error {

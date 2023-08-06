@@ -20,7 +20,6 @@
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use thiserror::Error;
 
 // Represents the application configuration.
 #[derive(Debug, Deserialize, PartialEq)]
@@ -115,36 +114,40 @@ impl TryFrom<String> for DuplicateFilterFields {
     }
 }
 
+mod io {
+    use thiserror::Error;
 
-/// This error type encompasses any error that can be returned by this module.
-#[derive(Error, Debug)]
-pub(crate) enum Error {
-    #[error("IO error")]
-    IoError(#[from] std::io::Error),
-    #[error("Syntax error")]
-    SyntaxError(#[from] serde_json::Error),
-}
-
-/// Load the content of the given file and parse it as Configuration.
-pub(crate) fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
-    let reader = std::fs::OpenOptions::new().read(true).open(file)?;
-    let result = from_reader(reader)?;
-
-    Ok(result)
-}
-
-/// Load the content of the given stream and parse it as Configuration.
-pub(crate) fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {
-    serde_json::from_reader(reader)
-}
-
-#[cfg(test)]
-mod test {
     use super::*;
 
-    #[test]
-    fn test_full_config() {
-        let content: &[u8] = br#"{
+    /// This error type encompasses any error that can be returned by this module.
+    #[derive(Error, Debug)]
+    pub(crate) enum Error {
+        #[error("IO error")]
+        IoError(#[from] std::io::Error),
+        #[error("Syntax error")]
+        SyntaxError(#[from] serde_json::Error),
+    }
+
+    /// Load the content of the given file and parse it as Configuration.
+    pub(crate) fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
+        let reader = std::fs::OpenOptions::new().read(true).open(file)?;
+        let result = from_reader(reader)?;
+
+        Ok(result)
+    }
+
+    /// Load the content of the given stream and parse it as Configuration.
+    pub(crate) fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {
+        serde_json::from_reader(reader)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn test_full_config() {
+            let content: &[u8] = br#"{
             "output": {
                 "format": {
                     "command_as_array": true,
@@ -171,47 +174,47 @@ mod test {
             }
         }"#;
 
-        let result = from_reader(content).unwrap();
+            let result = from_reader(content).unwrap();
 
-        let expected = Configuration {
-            output: Some(
-                Output {
-                    format: Some(
-                        Format {
-                            command_as_array: Some(true),
-                            drop_output_field: Some(false),
-                        }
-                    ),
-                    content: Some(
-                        Content {
-                            include_only_existing_source: Some(false),
-                            duplicate_filter_fields: Some(DuplicateFilterFields::All),
-                            paths_to_include: vec![PathBuf::from("sources")],
-                            paths_to_exclude: vec![PathBuf::from("tests")],
-                        }
-                    ),
-                }
-            ),
-            compilation: Some(
-                Compilation {
-                    compilers_to_recognize: vec![
-                        CompilerToRecognize {
-                            executable: PathBuf::from("/usr/local/bin/clang"),
-                            flags_to_add: vec![String::from("-Dfoo=bar")],
-                            flags_to_remove: vec![String::from("-Wall")],
-                        }
-                    ],
-                    compilers_to_exclude: vec![PathBuf::from("clang")],
-                }
-            ),
-        };
+            let expected = Configuration {
+                output: Some(
+                    Output {
+                        format: Some(
+                            Format {
+                                command_as_array: Some(true),
+                                drop_output_field: Some(false),
+                            }
+                        ),
+                        content: Some(
+                            Content {
+                                include_only_existing_source: Some(false),
+                                duplicate_filter_fields: Some(DuplicateFilterFields::All),
+                                paths_to_include: vec![PathBuf::from("sources")],
+                                paths_to_exclude: vec![PathBuf::from("tests")],
+                            }
+                        ),
+                    }
+                ),
+                compilation: Some(
+                    Compilation {
+                        compilers_to_recognize: vec![
+                            CompilerToRecognize {
+                                executable: PathBuf::from("/usr/local/bin/clang"),
+                                flags_to_add: vec![String::from("-Dfoo=bar")],
+                                flags_to_remove: vec![String::from("-Wall")],
+                            }
+                        ],
+                        compilers_to_exclude: vec![PathBuf::from("clang")],
+                    }
+                ),
+            };
 
-        assert_eq!(expected, result);
-    }
+            assert_eq!(expected, result);
+        }
 
-    #[test]
-    fn test_only_output_config() {
-        let content: &[u8] = br#"{
+        #[test]
+        fn test_only_output_config() {
+            let content: &[u8] = br#"{
             "output": {
                 "format": {
                     "command_as_array": false
@@ -222,36 +225,36 @@ mod test {
             }
         }"#;
 
-        let result = from_reader(content).unwrap();
+            let result = from_reader(content).unwrap();
 
-        let expected = Configuration {
-            output: Some(
-                Output {
-                    format: Some(
-                        Format {
-                            command_as_array: Some(false),
-                            drop_output_field: None,
-                        }
-                    ),
-                    content: Some(
-                        Content {
-                            include_only_existing_source: None,
-                            duplicate_filter_fields: Some(DuplicateFilterFields::FileOnly),
-                            paths_to_include: vec![],
-                            paths_to_exclude: vec![],
-                        }
-                    ),
-                }
-            ),
-            compilation: None,
-        };
+            let expected = Configuration {
+                output: Some(
+                    Output {
+                        format: Some(
+                            Format {
+                                command_as_array: Some(false),
+                                drop_output_field: None,
+                            }
+                        ),
+                        content: Some(
+                            Content {
+                                include_only_existing_source: None,
+                                duplicate_filter_fields: Some(DuplicateFilterFields::FileOnly),
+                                paths_to_include: vec![],
+                                paths_to_exclude: vec![],
+                            }
+                        ),
+                    }
+                ),
+                compilation: None,
+            };
 
-        assert_eq!(expected, result);
-    }
+            assert_eq!(expected, result);
+        }
 
-    #[test]
-    fn test_compilation_only_config() {
-        let content: &[u8] = br#"{
+        #[test]
+        fn test_compilation_only_config() {
+            let content: &[u8] = br#"{
             "compilation": {
                 "compilers_to_recognize": [
                     {
@@ -267,35 +270,35 @@ mod test {
             }
         }"#;
 
-        let result = from_reader(content).unwrap();
+            let result = from_reader(content).unwrap();
 
-        let expected = Configuration {
-            output: None,
-            compilation: Some(
-                Compilation {
-                    compilers_to_recognize: vec![
-                        CompilerToRecognize {
-                            executable: PathBuf::from("/usr/local/bin/clang"),
-                            flags_to_add: vec![],
-                            flags_to_remove: vec![],
-                        },
-                        CompilerToRecognize {
-                            executable: PathBuf::from("/usr/local/bin/clang++"),
-                            flags_to_add: vec![],
-                            flags_to_remove: vec![],
-                        },
-                    ],
-                    compilers_to_exclude: vec![PathBuf::from("clang"), PathBuf::from("clang++")],
-                }
-            ),
-        };
+            let expected = Configuration {
+                output: None,
+                compilation: Some(
+                    Compilation {
+                        compilers_to_recognize: vec![
+                            CompilerToRecognize {
+                                executable: PathBuf::from("/usr/local/bin/clang"),
+                                flags_to_add: vec![],
+                                flags_to_remove: vec![],
+                            },
+                            CompilerToRecognize {
+                                executable: PathBuf::from("/usr/local/bin/clang++"),
+                                flags_to_add: vec![],
+                                flags_to_remove: vec![],
+                            },
+                        ],
+                        compilers_to_exclude: vec![PathBuf::from("clang"), PathBuf::from("clang++")],
+                    }
+                ),
+            };
 
-        assert_eq!(expected, result);
-    }
+            assert_eq!(expected, result);
+        }
 
-    #[test]
-    fn test_failing_config() {
-        let content: &[u8] = br#"{
+        #[test]
+        fn test_failing_config() {
+            let content: &[u8] = br#"{
             "output": {
                 "format": {
                     "command_as_array": false
@@ -306,11 +309,12 @@ mod test {
             }
         }"#;
 
-        let result = from_reader(content);
+            let result = from_reader(content);
 
-        assert!(result.is_err());
+            assert!(result.is_err());
 
-        let message = result.unwrap_err().to_string();
-        assert_eq!("Unknown value \"files\" for duplicate filter at line 8 column 17", message);
+            let message = result.unwrap_err().to_string();
+            assert_eq!("Unknown value \"files\" for duplicate filter at line 8 column 17", message);
+        }
     }
 }
