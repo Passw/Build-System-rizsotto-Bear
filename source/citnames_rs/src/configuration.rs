@@ -22,15 +22,15 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 // Represents the application configuration.
-#[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Configuration {
+#[derive(Debug, Default, Deserialize, PartialEq)]
+pub struct Configuration {
     pub output: Option<Output>,
     pub compilation: Option<Compilation>,
 }
 
 // Represents compiler related configuration.
 #[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Compilation {
+pub struct Compilation {
     #[serde(default)]
     pub compilers_to_recognize: Vec<CompilerToRecognize>,
     #[serde(default)]
@@ -43,7 +43,7 @@ pub(crate) struct Compilation {
 // be a known compiler, and append the additional flags to the output
 // entry if the compiler is recognized.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(crate) struct CompilerToRecognize {
+pub struct CompilerToRecognize {
     pub executable: PathBuf,
     #[serde(default)]
     pub flags_to_add: Vec<String>,
@@ -53,7 +53,7 @@ pub(crate) struct CompilerToRecognize {
 
 // Groups together the output related configurations.
 #[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Output {
+pub struct Output {
     pub format: Option<Format>,
     pub content: Option<Content>,
 }
@@ -65,7 +65,7 @@ pub(crate) struct Output {
 // of strings or a single string (shell escaping to protect white spaces).
 // Another format element is if the output field is emitted or not.
 #[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Format {
+pub struct Format {
     // will default to true
     pub command_as_array: Option<bool>,
     // will default to false
@@ -78,7 +78,7 @@ pub(crate) struct Format {
 // These attributes can be read from the configuration file, and can be
 // overridden by command line arguments.
 #[derive(Debug, Deserialize, PartialEq)]
-pub(crate) struct Content {
+pub struct Content {
     // will default to false
     pub include_only_existing_source: Option<bool>,
     pub duplicate_filter_fields: Option<DuplicateFilterFields>,
@@ -91,7 +91,7 @@ pub(crate) struct Content {
 /// Represents how the duplicate filtering detects duplicate entries.
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(try_from = "String")]
-pub(crate) enum DuplicateFilterFields {
+pub enum DuplicateFilterFields {
     FileOnly,
     FileAndOutputOnly,
     All,
@@ -114,14 +114,16 @@ impl TryFrom<String> for DuplicateFilterFields {
     }
 }
 
-mod io {
+pub mod io {
+    use std::io::stdin;
+
     use thiserror::Error;
 
     use super::*;
 
     /// This error type encompasses any error that can be returned by this module.
     #[derive(Error, Debug)]
-    pub(crate) enum Error {
+    pub enum Error {
         #[error("IO error")]
         IoError(#[from] std::io::Error),
         #[error("Syntax error")]
@@ -129,15 +131,22 @@ mod io {
     }
 
     /// Load the content of the given file and parse it as Configuration.
-    pub(crate) fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
+    pub fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
         let reader = std::fs::OpenOptions::new().read(true).open(file)?;
         let result = from_reader(reader)?;
 
         Ok(result)
     }
 
+    pub fn from_stdin() -> Result<Configuration, Error> {
+        let reader = stdin();
+        let result = from_reader(reader)?;
+
+        Ok(result)
+    }
+
     /// Load the content of the given stream and parse it as Configuration.
-    pub(crate) fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {
+    pub fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {
         serde_json::from_reader(reader)
     }
 
