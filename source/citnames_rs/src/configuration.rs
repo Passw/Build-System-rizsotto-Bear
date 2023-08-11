@@ -308,22 +308,22 @@ pub mod io {
         #[test]
         fn test_failing_config() {
             let content: &[u8] = br#"{
-            "output": {
-                "format": {
-                    "command_as_array": false
-                },
-                "content": {
-                    "duplicate_filter_fields": "files"
+                "output": {
+                    "format": {
+                        "command_as_array": false
+                    },
+                    "content": {
+                        "duplicate_filter_fields": "files"
+                    }
                 }
-            }
-        }"#;
+            }"#;
 
             let result = from_reader(content);
 
             assert!(result.is_err());
 
             let message = result.unwrap_err().to_string();
-            assert_eq!("Unknown value \"files\" for duplicate filter at line 8 column 17", message);
+            assert_eq!("Unknown value \"files\" for duplicate filter at line 8 column 21", message);
         }
     }
 }

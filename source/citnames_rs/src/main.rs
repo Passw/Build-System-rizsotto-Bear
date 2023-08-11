@@ -17,10 +17,14 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+extern crate core;
+#[macro_use]
+extern crate lazy_static;
+
 use std::path::Path;
 
 use anyhow::Result;
-use clap::{arg, ArgAction, command};
+use clap::{arg, ArgAction, ArgMatches, command};
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 
@@ -28,6 +32,10 @@ use crate::configuration::Configuration;
 use crate::configuration::io::{from_file, from_stdin};
 
 mod configuration;
+mod events;
+mod execution;
+mod compilation;
+mod tools;
 
 fn main() -> Result<()> {
     let matches = command!()
@@ -47,11 +55,7 @@ fn main() -> Result<()> {
         .get_matches();
 
     // configure logging
-    let verbose = matches.get_count("verbose");
-    SimpleLogger::new()
-        .with_level(into_log_level(verbose))
-        .init()
-        .unwrap();
+    configure_logging(&matches);
 
     // read config
     let config = match matches.get_one::<String>("config").map(|s| s.as_ref()) {
@@ -74,12 +78,17 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn into_log_level(count: u8) -> LevelFilter {
-    match count {
+fn configure_logging(matches: &ArgMatches) {
+    let level = match matches.get_count("verbose") {
         0 => LevelFilter::Error,
         1 => LevelFilter::Warn,
         2 => LevelFilter::Info,
         3 => LevelFilter::Debug,
         _ => LevelFilter::Trace,
-    }
+    };
+    // fixme: enable timestamp for debug only
+    SimpleLogger::new()
+        .with_level(level)
+        .init()
+        .unwrap();
 }
