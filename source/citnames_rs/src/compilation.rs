@@ -68,6 +68,80 @@ impl TryFrom<CompilerCall> for Vec<Entry> {
     }
 }
 
+// type EntryFilterPredicate = Box<dyn FnMut(&Entry) -> bool>;
+//
+//
+// pub enum DuplicateDetectionFields {
+//     Source,
+//     SourceAndOutput,
+//     All,
+// }
+//
+// impl DuplicateDetectionFields {
+//     fn hash_source(entry: &Entry) -> u64 {
+//         let mut s = DefaultHasher::new();
+//         entry.file.hash(&mut s);
+//         s.finish()
+//     }
+//
+//     fn hash_source_and_output(entry: &Entry) -> u64 {
+//         let mut s = DefaultHasher::new();
+//         entry.file.hash(&mut s);
+//         entry.output.hash(&mut s);
+//         s.finish()
+//     }
+//
+//     fn hash_all(entry: &Entry) -> u64 {
+//         let mut s = DefaultHasher::new();
+//         entry.file.hash(&mut s);
+//         entry.directory.hash(&mut s);
+//         entry.arguments.hash(&mut s);
+//         s.finish()
+//     }
+//
+//     fn hash(&self) -> fn(&Entry) -> u64 {
+//         match self {
+//             DuplicateDetectionFields::Source =>
+//                 DuplicateDetectionFields::hash_source,
+//             DuplicateDetectionFields::SourceAndOutput =>
+//                 DuplicateDetectionFields::hash_source_and_output,
+//             DuplicateDetectionFields::All =>
+//                 DuplicateDetectionFields::hash_all,
+//         }
+//     }
+// }
+//
+// impl From<DuplicateDetectionFields> for EntryFilterPredicate {
+//     fn from(value: DuplicateDetectionFields) -> Self {
+//         let mut have_seen = HashSet::new();
+//         let hash_calculation = DuplicateDetectionFields::hash(&value);
+//
+//         Box::new(move |entry| {
+//             let hash = hash_calculation(&entry);
+//             if !have_seen.contains(&hash) {
+//                 have_seen.insert(hash);
+//                 true
+//             } else {
+//                 false
+//             }
+//         })
+//     }
+// }
+//
+//
+//
+// pub struct Content {
+//     pub include_only_existing_source: bool,
+//     pub sources_to_include: Vec<std::path::PathBuf>,
+//     pub sources_to_exclude: Vec<std::path::PathBuf>,
+// }
+//
+// impl From<Content> for EntryFilterPredicate {
+//     fn from(value: Content) -> Self {
+//         todo!()
+//     }
+// }
+
 fn into_abspath(path: PathBuf, root: &Path) -> Result<PathBuf, std::io::Error> {
     let candidate = if path.is_absolute() {
         path.absolutize()

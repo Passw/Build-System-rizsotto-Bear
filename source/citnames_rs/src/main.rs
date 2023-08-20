@@ -18,24 +18,38 @@
  */
 
 extern crate core;
-#[macro_use]
-extern crate lazy_static;
 
-use std::path::Path;
+use std::fs::OpenOptions;
+use std::io::stdin;
+use std::thread;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{arg, ArgAction, ArgMatches, command};
-use log::LevelFilter;
+use log::{error, LevelFilter};
 use simple_logger::SimpleLogger;
+use thiserror::Error;
+use crossbeam_channel::{unbounded, Sender, Receiver, bounded};
+use json_compilation_db::{Entry, read, write};
 
 use crate::configuration::Configuration;
-use crate::configuration::io::{from_file, from_stdin};
+use crate::configuration::io::from_reader;
+use crate::execution::Execution;
 
 mod configuration;
 mod events;
 mod execution;
 mod compilation;
 mod tools;
+
+
+/// This error type encompasses any error that can be returned by this module.
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("IO error")]
+    IoError(#[from] std::io::Error),
+    #[error("Syntax error")]
+    SyntaxError(#[from] serde_json::Error),
+}
 
 fn main() -> Result<()> {
     let matches = command!()
@@ -57,25 +71,41 @@ fn main() -> Result<()> {
     // configure logging
     configure_logging(&matches);
 
-    // read config
-    let config = match matches.get_one::<String>("config").map(|s| s.as_ref()) {
-        Some("-") =>
-            from_stdin()?,
-        Some(file) =>
-            from_file(Path::new(file))?,
+    // check semantic of the arguments
+    let input = matches.get_one::<String>("input")
+        .map(String::as_str)
+        .expect("input is defaulted");
+    let output = matches.get_one::<String>("output")
+        .map(String::as_str)
+        .expect("output is defaulted");
+    let config = matches.get_one::<String>("config")
+        .map(String::as_str);
+    let append = matches.get_one::<bool>("append")
+        .unwrap_or(&false);
+
+    if input == "-" && config.unwrap_or("+") == "-" {
+        error!("Both input and config reading the standard input.");
+    }
+    if *append && output == "-" {
+        error!("Append can't applied to the standard output.");
+    }
+
+    // read configuration
+    let config = match config {
+        Some("-") => {
+            let reader = stdin();
+            from_reader(reader).context("Failed to read configuration from stdin")?
+        }
+        Some(file) => {
+            let reader = OpenOptions::new().read(true).open(file)?;
+            from_reader(reader)
+                .with_context(|| format!("Failed to read configuration from file: {}", file))?
+        }
         None =>
             Configuration::default(),
     };
 
-    println!("Hello, world! {:?}", config);
-
-    log::trace!("trace message");
-    log::debug!("debug message");
-    log::info!("info message");
-    log::warn!("warn message");
-    log::error!("error message");
-
-    Ok(())
+    run(config, input.into(), output.into(), *append)
 }
 
 fn configure_logging(matches: &ArgMatches) {
@@ -91,4 +121,58 @@ fn configure_logging(matches: &ArgMatches) {
         .with_level(level)
         .init()
         .unwrap();
+}
+
+fn run(config: Configuration, input: String, output: String, append: bool) -> Result<()> {
+    let (snd, rcv) = bounded::<Entry>(100);
+
+    let captured_output = output.to_owned();
+    thread::spawn(move || {
+        new_entries_from_events(&snd, input.as_str()).expect("");
+        if append {
+            old_entries_from_previous_run(&snd, captured_output.as_str()).expect("");
+        }
+        drop(snd);
+    });
+
+    // consume the entry streams here
+    let temp = format!("{}.tmp", &output);
+    {
+        let file = OpenOptions::new().write(true).open(&temp)?;
+        // todo: filter duplicates
+        write(file, rcv.iter())?;
+    }
+    std::fs::remove_file(&output)?;
+    std::fs::rename(&output, &temp)?;
+
+    Ok(())
+}
+
+fn old_entries_from_previous_run(sink: &Sender<Entry>, source: &str) -> Result<()> {
+    let mut count: u32 = 0;
+    let reader = OpenOptions::new().read(true).open(source)?;
+    let events = read(reader);
+    for event in events {
+        match event {
+            Ok(value) => {
+                sink.send(value)?;
+                count += 1;
+            }
+            Err(error) => {
+                // todo
+                log::error!("")
+            }
+        }
+    }
+
+    log::debug!("Found {count} entries from previous run.");
+    Ok(())
+}
+
+fn new_entries_from_events(sink: &Sender<Entry>, input: &str) -> Result<u32> {
+    let (exec_snd, exec_rcv) = unbounded::<Execution>();
+
+    // log::debug!("Found {new_entries} entries");
+
+    Ok(0)
 }

@@ -18,6 +18,7 @@
  */
 
 use std::collections::HashSet;
+use lazy_static::lazy_static;
 
 pub fn looks_like_a_source_file(argument: &str) -> bool {
     // unix flags

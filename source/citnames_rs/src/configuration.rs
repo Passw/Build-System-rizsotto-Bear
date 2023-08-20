@@ -115,35 +115,8 @@ impl TryFrom<String> for DuplicateFilterFields {
 }
 
 pub mod io {
-    use std::io::stdin;
-
-    use thiserror::Error;
 
     use super::*;
-
-    /// This error type encompasses any error that can be returned by this module.
-    #[derive(Error, Debug)]
-    pub enum Error {
-        #[error("IO error")]
-        IoError(#[from] std::io::Error),
-        #[error("Syntax error")]
-        SyntaxError(#[from] serde_json::Error),
-    }
-
-    /// Load the content of the given file and parse it as Configuration.
-    pub fn from_file(file: &std::path::Path) -> Result<Configuration, Error> {
-        let reader = std::fs::OpenOptions::new().read(true).open(file)?;
-        let result = from_reader(reader)?;
-
-        Ok(result)
-    }
-
-    pub fn from_stdin() -> Result<Configuration, Error> {
-        let reader = stdin();
-        let result = from_reader(reader)?;
-
-        Ok(result)
-    }
 
     /// Load the content of the given stream and parse it as Configuration.
     pub fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {

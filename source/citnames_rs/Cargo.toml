@@ -19,7 +19,10 @@ path-absolutize = "3.1"
 num_cpus = "1.16"
 crossbeam = "0.8"
 crossbeam-channel = "0.5"
-json_compilation_db = "0.3.0"
+json_compilation_db = "1.0"
 log = "0.4"
 simple_logger = { version = "4.2", default-features = false, features = ["timestamps"]}
 clap = { version = "4.3", default-features = false, features = ["std", "cargo", "help", "usage", "suggestions"] }
+
+[[bin]]
+name = "citnames"
