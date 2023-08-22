@@ -25,11 +25,10 @@ use std::thread;
 
 use anyhow::{Context, Result};
 use clap::{arg, ArgAction, ArgMatches, command};
+use crossbeam_channel::{bounded, Sender, unbounded};
+use json_compilation_db::{Entry, read, write};
 use log::{error, LevelFilter};
 use simple_logger::SimpleLogger;
-use thiserror::Error;
-use crossbeam_channel::{unbounded, Sender, Receiver, bounded};
-use json_compilation_db::{Entry, read, write};
 
 use crate::configuration::Configuration;
 use crate::configuration::io::from_reader;
@@ -40,16 +39,8 @@ mod events;
 mod execution;
 mod compilation;
 mod tools;
+mod filter;
 
-
-/// This error type encompasses any error that can be returned by this module.
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("IO error")]
-    IoError(#[from] std::io::Error),
-    #[error("Syntax error")]
-    SyntaxError(#[from] serde_json::Error),
-}
 
 fn main() -> Result<()> {
     let matches = command!()

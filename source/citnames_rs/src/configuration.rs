@@ -24,12 +24,14 @@ use serde::Deserialize;
 // Represents the application configuration.
 #[derive(Debug, Default, Deserialize, PartialEq)]
 pub struct Configuration {
-    pub output: Option<Output>,
-    pub compilation: Option<Compilation>,
+    #[serde(default)]
+    pub output: Output,
+    #[serde(default)]
+    pub compilation: Compilation,
 }
 
 // Represents compiler related configuration.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 pub struct Compilation {
     #[serde(default)]
     pub compilers_to_recognize: Vec<CompilerToRecognize>,
@@ -43,6 +45,7 @@ pub struct Compilation {
 // be a known compiler, and append the additional flags to the output
 // entry if the compiler is recognized.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
+// fixme: remove clone and use reference in `Configured`
 pub struct CompilerToRecognize {
     pub executable: PathBuf,
     #[serde(default)]
@@ -52,10 +55,12 @@ pub struct CompilerToRecognize {
 }
 
 // Groups together the output related configurations.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 pub struct Output {
-    pub format: Option<Format>,
-    pub content: Option<Content>,
+    #[serde(default)]
+    pub format: Format,
+    #[serde(default)]
+    pub content: Content,
 }
 
 // Controls the output format.
@@ -66,10 +71,19 @@ pub struct Output {
 // Another format element is if the output field is emitted or not.
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct Format {
-    // will default to true
-    pub command_as_array: Option<bool>,
-    // will default to false
-    pub drop_output_field: Option<bool>,
+    #[serde(default = "enabled")]
+    pub command_as_array: bool,
+    #[serde(default = "disabled")]
+    pub drop_output_field: bool,
+}
+
+impl Default for Format {
+    fn default() -> Self {
+        Format {
+            command_as_array: enabled(),
+            drop_output_field: disabled(),
+        }
+    }
 }
 
 // Controls the content of the output.
@@ -79,13 +93,33 @@ pub struct Format {
 // overridden by command line arguments.
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct Content {
-    // will default to false
-    pub include_only_existing_source: Option<bool>,
-    pub duplicate_filter_fields: Option<DuplicateFilterFields>,
+    #[serde(default = "disabled")]
+    pub include_only_existing_source: bool,
+    #[serde(default)]
+    pub duplicate_filter_fields: DuplicateFilterFields,
     #[serde(default)]
     pub paths_to_include: Vec<PathBuf>,
     #[serde(default)]
     pub paths_to_exclude: Vec<PathBuf>,
+}
+
+impl Default for Content {
+    fn default() -> Self {
+        Content {
+            include_only_existing_source: disabled(),
+            duplicate_filter_fields: DuplicateFilterFields::default(),
+            paths_to_include: vec![],
+            paths_to_exclude: vec![],
+        }
+    }
+}
+
+fn disabled() -> bool {
+    false
+}
+
+fn enabled() -> bool {
+    true
 }
 
 /// Represents how the duplicate filtering detects duplicate entries.
@@ -95,6 +129,12 @@ pub enum DuplicateFilterFields {
     FileOnly,
     FileAndOutputOnly,
     All,
+}
+
+impl Default for DuplicateFilterFields {
+    fn default() -> Self {
+        DuplicateFilterFields::FileAndOutputOnly
+    }
 }
 
 impl TryFrom<String> for DuplicateFilterFields {
@@ -115,7 +155,6 @@ impl TryFrom<String> for DuplicateFilterFields {
 }
 
 pub mod io {
-
     use super::*;
 
     /// Load the content of the given stream and parse it as Configuration.
@@ -159,36 +198,28 @@ pub mod io {
             let result = from_reader(content).unwrap();
 
             let expected = Configuration {
-                output: Some(
-                    Output {
-                        format: Some(
-                            Format {
-                                command_as_array: Some(true),
-                                drop_output_field: Some(false),
-                            }
-                        ),
-                        content: Some(
-                            Content {
-                                include_only_existing_source: Some(false),
-                                duplicate_filter_fields: Some(DuplicateFilterFields::All),
-                                paths_to_include: vec![PathBuf::from("sources")],
-                                paths_to_exclude: vec![PathBuf::from("tests")],
-                            }
-                        ),
-                    }
-                ),
-                compilation: Some(
-                    Compilation {
-                        compilers_to_recognize: vec![
-                            CompilerToRecognize {
-                                executable: PathBuf::from("/usr/local/bin/clang"),
-                                flags_to_add: vec![String::from("-Dfoo=bar")],
-                                flags_to_remove: vec![String::from("-Wall")],
-                            }
-                        ],
-                        compilers_to_exclude: vec![PathBuf::from("clang")],
-                    }
-                ),
+                output: Output {
+                    format: Format {
+                        command_as_array: true,
+                        drop_output_field: false,
+                    },
+                    content: Content {
+                        include_only_existing_source: false,
+                        duplicate_filter_fields: DuplicateFilterFields::All,
+                        paths_to_include: vec![PathBuf::from("sources")],
+                        paths_to_exclude: vec![PathBuf::from("tests")],
+                    },
+                },
+                compilation: Compilation {
+                    compilers_to_recognize: vec![
+                        CompilerToRecognize {
+                            executable: PathBuf::from("/usr/local/bin/clang"),
+                            flags_to_add: vec![String::from("-Dfoo=bar")],
+                            flags_to_remove: vec![String::from("-Wall")],
+                        }
+                    ],
+                    compilers_to_exclude: vec![PathBuf::from("clang")],
+                },
             };
 
             assert_eq!(expected, result);
@@ -210,25 +241,19 @@ pub mod io {
             let result = from_reader(content).unwrap();
 
             let expected = Configuration {
-                output: Some(
-                    Output {
-                        format: Some(
-                            Format {
-                                command_as_array: Some(false),
-                                drop_output_field: None,
-                            }
-                        ),
-                        content: Some(
-                            Content {
-                                include_only_existing_source: None,
-                                duplicate_filter_fields: Some(DuplicateFilterFields::FileOnly),
-                                paths_to_include: vec![],
-                                paths_to_exclude: vec![],
-                            }
-                        ),
-                    }
-                ),
-                compilation: None,
+                output: Output {
+                    format: Format {
+                        command_as_array: false,
+                        drop_output_field: false,
+                    },
+                    content: Content {
+                        include_only_existing_source: false,
+                        duplicate_filter_fields: DuplicateFilterFields::FileOnly,
+                        paths_to_include: vec![],
+                        paths_to_exclude: vec![],
+                    },
+                },
+                compilation: Compilation::default(),
             };
 
             assert_eq!(expected, result);
@@ -255,24 +280,22 @@ pub mod io {
             let result = from_reader(content).unwrap();
 
             let expected = Configuration {
-                output: None,
-                compilation: Some(
-                    Compilation {
-                        compilers_to_recognize: vec![
-                            CompilerToRecognize {
-                                executable: PathBuf::from("/usr/local/bin/clang"),
-                                flags_to_add: vec![],
-                                flags_to_remove: vec![],
-                            },
-                            CompilerToRecognize {
-                                executable: PathBuf::from("/usr/local/bin/clang++"),
-                                flags_to_add: vec![],
-                                flags_to_remove: vec![],
-                            },
-                        ],
-                        compilers_to_exclude: vec![PathBuf::from("clang"), PathBuf::from("clang++")],
-                    }
-                ),
+                output: Output::default(),
+                compilation: Compilation {
+                    compilers_to_recognize: vec![
+                        CompilerToRecognize {
+                            executable: PathBuf::from("/usr/local/bin/clang"),
+                            flags_to_add: vec![],
+                            flags_to_remove: vec![],
+                        },
+                        CompilerToRecognize {
+                            executable: PathBuf::from("/usr/local/bin/clang++"),
+                            flags_to_add: vec![],
+                            flags_to_remove: vec![],
+                        },
+                    ],
+                    compilers_to_exclude: vec![PathBuf::from("clang"), PathBuf::from("clang++")],
+                },
             };
 
             assert_eq!(expected, result);

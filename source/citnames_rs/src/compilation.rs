@@ -19,21 +19,14 @@
 
 use std::path::{Path, PathBuf};
 
+use anyhow::{anyhow, Result};
 use json_compilation_db::Entry;
 use path_absolutize::Absolutize;
-use thiserror::Error;
+
 use crate::tools::CompilerCall;
 
-#[derive(Error, Debug)]
-pub(crate) enum Error {
-    #[error("IO error")]
-    IoError(#[from] std::io::Error),
-    #[error("encode error")]
-    OsString,
-}
-
 impl TryFrom<CompilerCall> for Vec<Entry> {
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn try_from(value: CompilerCall) -> Result<Self, Self::Error> {
         match value {
@@ -68,80 +61,6 @@ impl TryFrom<CompilerCall> for Vec<Entry> {
     }
 }
 
-// type EntryFilterPredicate = Box<dyn FnMut(&Entry) -> bool>;
-//
-//
-// pub enum DuplicateDetectionFields {
-//     Source,
-//     SourceAndOutput,
-//     All,
-// }
-//
-// impl DuplicateDetectionFields {
-//     fn hash_source(entry: &Entry) -> u64 {
-//         let mut s = DefaultHasher::new();
-//         entry.file.hash(&mut s);
-//         s.finish()
-//     }
-//
-//     fn hash_source_and_output(entry: &Entry) -> u64 {
-//         let mut s = DefaultHasher::new();
-//         entry.file.hash(&mut s);
-//         entry.output.hash(&mut s);
-//         s.finish()
-//     }
-//
-//     fn hash_all(entry: &Entry) -> u64 {
-//         let mut s = DefaultHasher::new();
-//         entry.file.hash(&mut s);
-//         entry.directory.hash(&mut s);
-//         entry.arguments.hash(&mut s);
-//         s.finish()
-//     }
-//
-//     fn hash(&self) -> fn(&Entry) -> u64 {
-//         match self {
-//             DuplicateDetectionFields::Source =>
-//                 DuplicateDetectionFields::hash_source,
-//             DuplicateDetectionFields::SourceAndOutput =>
-//                 DuplicateDetectionFields::hash_source_and_output,
-//             DuplicateDetectionFields::All =>
-//                 DuplicateDetectionFields::hash_all,
-//         }
-//     }
-// }
-//
-// impl From<DuplicateDetectionFields> for EntryFilterPredicate {
-//     fn from(value: DuplicateDetectionFields) -> Self {
-//         let mut have_seen = HashSet::new();
-//         let hash_calculation = DuplicateDetectionFields::hash(&value);
-//
-//         Box::new(move |entry| {
-//             let hash = hash_calculation(&entry);
-//             if !have_seen.contains(&hash) {
-//                 have_seen.insert(hash);
-//                 true
-//             } else {
-//                 false
-//             }
-//         })
-//     }
-// }
-//
-//
-//
-// pub struct Content {
-//     pub include_only_existing_source: bool,
-//     pub sources_to_include: Vec<std::path::PathBuf>,
-//     pub sources_to_exclude: Vec<std::path::PathBuf>,
-// }
-//
-// impl From<Content> for EntryFilterPredicate {
-//     fn from(value: Content) -> Self {
-//         todo!()
-//     }
-// }
-
 fn into_abspath(path: PathBuf, root: &Path) -> Result<PathBuf, std::io::Error> {
     let candidate = if path.is_absolute() {
         path.absolutize()
@@ -156,8 +75,11 @@ fn into_abspath_opt(path: Option<PathBuf>, root: &Path) -> Result<Option<PathBuf
         .map_or(Ok(None), |v| v.map(Some))
 }
 
-fn into_string(path: &PathBuf) -> Result<String, Error> {
-    path.clone().into_os_string().into_string().map_err(|_| Error::OsString)
+fn into_string(path: &PathBuf) -> Result<String> {
+    path.clone()
+        .into_os_string()
+        .into_string()
+        .map_err(|_| anyhow!("Path can't be encoded to UTF"))
 }
 
 #[cfg(test)]
@@ -165,7 +87,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_non_compilations() -> Result<(), Error> {
+    fn test_non_compilations() -> Result<()> {
         let empty: Vec<Entry> = vec![];
 
         let result: Vec<Entry> = CompilerCall::Query.try_into()?;
@@ -178,7 +100,7 @@ mod test {
     }
 
     #[test]
-    fn test_single_source_compilation() -> Result<(), Error> {
+    fn test_single_source_compilation() -> Result<()> {
         let input = CompilerCall::Compile {
             working_dir: PathBuf::from("/home/user"),
             compiler: PathBuf::from("clang"),
@@ -207,7 +129,7 @@ mod test {
     }
 
     #[test]
-    fn test_multiple_sources_compilation() -> Result<(), Error> {
+    fn test_multiple_sources_compilation() -> Result<()> {
         let input = CompilerCall::Compile {
             working_dir: PathBuf::from("/home/user"),
             compiler: PathBuf::from("clang"),

@@ -24,7 +24,6 @@ use crate::configuration::CompilerToRecognize;
 use crate::execution::Execution;
 use crate::tools::{CompilerCall, Semantic};
 use crate::tools::{Any, RecognitionResult, Tool};
-use crate::tools::Error::SourceNotFound;
 use crate::tools::matchers::source::looks_like_a_source_file;
 use crate::tools::RecognitionResult::{NotRecognized, Recognized};
 
@@ -68,7 +67,7 @@ impl Tool for Configured {
             }
 
             if sources.is_empty() {
-                Recognized(Err(SourceNotFound))
+                Recognized(Err(String::from("source file is not found")))
             } else {
                 Recognized(
                     Ok(
@@ -135,7 +134,7 @@ mod test {
             environment: HashMap::new(),
         };
 
-        assert_eq!(Recognized(Err(SourceNotFound)), SUT.recognize(&input));
+        assert_eq!(Recognized(Err(String::from("source file is not found"))), SUT.recognize(&input));
     }
 
     #[test]

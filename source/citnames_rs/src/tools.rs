@@ -19,8 +19,6 @@
 
 use std::path::PathBuf;
 
-use thiserror::Error;
-
 use crate::configuration::Compilation;
 use crate::execution::Execution;
 use crate::tools::configured::Configured;
@@ -40,7 +38,7 @@ pub(crate) trait Tool {
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum RecognitionResult {
-    Recognized(Result<Semantic, Error>),
+    Recognized(Result<Semantic, String>),
     NotRecognized,
 }
 
@@ -48,6 +46,8 @@ pub(crate) enum RecognitionResult {
 #[derive(Debug, PartialEq)]
 pub(crate) enum Semantic {
     Compiler(CompilerCall),
+    UnixCommand,
+    BuildCommand,
 }
 
 /// Represents a compiler call.
@@ -62,16 +62,6 @@ pub(crate) enum CompilerCall {
         sources: Vec<PathBuf>,
         output: Option<PathBuf>,
     },
-}
-
-#[derive(Error, Debug, PartialEq)]
-pub(crate) enum Error {
-    #[error("Executable not recognized")]
-    ExecutableFailure,
-    #[error("Argument not recognized")]
-    ArgumentFailure,
-    #[error("Source file not found")]
-    SourceNotFound,
 }
 
 
@@ -112,6 +102,31 @@ impl Tool for ExcludeOr {
     }
 }
 
+impl From<Compilation> for Box<dyn Tool> {
+    fn from(value: Compilation) -> Self {
+        let mut tools = vec![
+            Box::new(Wrapper::new()) as Box<dyn Tool>,
+        ];
+
+        // The hinted tools should be the first to recognize.
+        if !value.compilers_to_recognize.is_empty() {
+            let configured = Configured::from(value.compilers_to_recognize);
+            tools.insert(0, Box::new(configured))
+        }
+        // Excluded compiler check should be done before anything.
+        if !value.compilers_to_exclude.is_empty() {
+            return Box::new(
+                ExcludeOr {
+                    // exclude the executables are explicitly mentioned in the config file.
+                    excludes: value.compilers_to_exclude,
+                    or: Box::new(Any { tools }),
+                }
+            );
+        }
+        // Return the tools we configured.
+        Box::new(Any { tools })
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -225,7 +240,7 @@ mod test {
                 MockTool::Recognize =>
                     Recognized(Ok(Semantic::Compiler(Query))),
                 MockTool::RecognizeFailed =>
-                    Recognized(Err(Error::ExecutableFailure)),
+                    Recognized(Err(String::from("problem"))),
                 MockTool::NotRecognize =>
                     NotRecognized,
             }
@@ -240,31 +255,4 @@ mod test {
             environment: HashMap::new(),
         }
     }
-}
-
-
-fn init_from(config: Option<Compilation>) -> Box<dyn Tool> {
-    let mut tools = vec![
-        Box::new(Wrapper::new()) as Box<dyn Tool>,
-    ];
-
-    if let Some(compilation) = config {
-        // The hinted tools should be the first to recognize.
-        if !compilation.compilers_to_recognize.is_empty() {
-            let configured = Configured::from(compilation.compilers_to_recognize);
-            tools.insert(0, Box::new(configured))
-        }
-        // Excluded compiler check should be done before anything.
-        if !compilation.compilers_to_exclude.is_empty() {
-            return Box::new(
-                ExcludeOr {
-                    // exclude the executables are explicitly mentioned in the config file.
-                    excludes: compilation.compilers_to_exclude,
-                    or: Box::new(Any { tools }),
-                }
-            );
-        }
-    }
-    // Return the tools we configured.
-    Box::new(Any { tools })
 }
