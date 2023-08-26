@@ -23,7 +23,7 @@ use std::fs::OpenOptions;
 use std::io::stdin;
 use std::thread;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use clap::{arg, ArgAction, ArgMatches, command};
 use crossbeam_channel::{bounded, Sender, unbounded};
 use json_compilation_db::{Entry, read, write};
@@ -33,6 +33,7 @@ use simple_logger::SimpleLogger;
 use crate::configuration::Configuration;
 use crate::configuration::io::from_reader;
 use crate::execution::Execution;
+use crate::filter::EntryPredicate;
 
 mod configuration;
 mod events;
@@ -60,7 +61,8 @@ fn main() -> Result<()> {
         .get_matches();
 
     // configure logging
-    configure_logging(&matches);
+    configure_logging(&matches)
+        .context("Configure logging from command line arguments.")?;
 
     // check semantic of the arguments
     let input = matches.get_one::<String>("input")
@@ -76,9 +78,11 @@ fn main() -> Result<()> {
 
     if input == "-" && config.unwrap_or("+") == "-" {
         error!("Both input and config reading the standard input.");
+        return Err(anyhow!("Both input and config reading the standard input."));
     }
     if *append && output == "-" {
         error!("Append can't applied to the standard output.");
+        return Err(anyhow!("Append can't applied to the standard output."));
     }
 
     // read configuration
@@ -99,21 +103,6 @@ fn main() -> Result<()> {
     run(config, input.into(), output.into(), *append)
 }
 
-fn configure_logging(matches: &ArgMatches) {
-    let level = match matches.get_count("verbose") {
-        0 => LevelFilter::Error,
-        1 => LevelFilter::Warn,
-        2 => LevelFilter::Info,
-        3 => LevelFilter::Debug,
-        _ => LevelFilter::Trace,
-    };
-    // fixme: enable timestamp for debug only
-    SimpleLogger::new()
-        .with_level(level)
-        .init()
-        .unwrap();
-}
-
 fn run(config: Configuration, input: String, output: String, append: bool) -> Result<()> {
     let (snd, rcv) = bounded::<Entry>(100);
 
@@ -129,9 +118,9 @@ fn run(config: Configuration, input: String, output: String, append: bool) -> Re
     // consume the entry streams here
     let temp = format!("{}.tmp", &output);
     {
+        let filter: EntryPredicate = config.output.content.into();
         let file = OpenOptions::new().write(true).open(&temp)?;
-        // todo: filter duplicates
-        write(file, rcv.iter())?;
+        write(file, rcv.iter().filter(filter))?;
     }
     std::fs::remove_file(&output)?;
     std::fs::rename(&output, &temp)?;
@@ -166,4 +155,22 @@ fn new_entries_from_events(sink: &Sender<Entry>, input: &str) -> Result<u32> {
     // log::debug!("Found {new_entries} entries");
 
     Ok(0)
+}
+
+fn configure_logging(matches: &ArgMatches) -> Result<()> {
+    let level = match matches.get_count("verbose") {
+        0 => LevelFilter::Error,
+        1 => LevelFilter::Warn,
+        2 => LevelFilter::Info,
+        3 => LevelFilter::Debug,
+        _ => LevelFilter::Trace,
+    };
+    let mut logger = SimpleLogger::new()
+        .with_level(level);
+    if level <= LevelFilter::Debug {
+        logger = logger.with_local_timestamps()
+    }
+    logger.init()?;
+
+    Ok(())
 }

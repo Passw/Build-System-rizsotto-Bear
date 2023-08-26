@@ -20,10 +20,120 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 use json_compilation_db::Entry;
 
 use crate::configuration::{Content, DuplicateFilterFields};
+
+pub(crate) type EntryPredicate = Box<dyn FnMut(&Entry) -> bool>;
+
+impl Into<EntryPredicate> for Content {
+    fn into(self) -> EntryPredicate {
+        let source_check = EntryPredicateBuilder::source_check(self.include_only_existing_source);
+        let paths_to_include = EntryPredicateBuilder::contains(self.paths_to_include);
+        let paths_to_exclude = EntryPredicateBuilder::contains(self.paths_to_exclude);
+        let duplicates = EntryPredicateBuilder::duplicates(self.duplicate_filter_fields);
+
+        (!paths_to_exclude & paths_to_include & source_check & duplicates).build()
+    }
+}
+
+
+struct EntryPredicateBuilder {
+    predicate_opt: Option<EntryPredicate>,
+}
+
+impl EntryPredicateBuilder {
+    fn build(self) -> EntryPredicate {
+        match self.predicate_opt {
+            Some(predicate) => predicate,
+            None => Box::new(|_: &Entry| true),
+        }
+    }
+
+    fn source_check(include_only_existing_source: bool) -> Self {
+        if include_only_existing_source {
+            let predicate: EntryPredicate = Box::new(|entry| { entry.file.is_file() });
+            EntryPredicateBuilder { predicate_opt: Some(predicate) }
+        } else {
+            EntryPredicateBuilder { predicate_opt: None }
+        }
+    }
+
+    fn contains(paths: Vec<PathBuf>) -> Self {
+        if paths.is_empty() {
+            EntryPredicateBuilder { predicate_opt: None }
+        } else {
+            let predicate: EntryPredicate = Box::new(move |entry| {
+                paths.iter().any(|path| { entry.file.starts_with(path) })
+            });
+            EntryPredicateBuilder { predicate_opt: Some(predicate) }
+        }
+    }
+
+    fn duplicates(config: DuplicateFilterFields) -> Self {
+        let hash_function: fn(&Entry) -> u64 = config.into();
+        let mut have_seen = HashSet::new();
+
+        let predicate: EntryPredicate = Box::new(move |entry| {
+            let hash = hash_function(&entry);
+            if !have_seen.contains(&hash) {
+                have_seen.insert(hash);
+                true
+            } else {
+                false
+            }
+        });
+        EntryPredicateBuilder { predicate_opt: Some(predicate) }
+    }
+}
+
+impl std::ops::BitAnd for EntryPredicateBuilder {
+    type Output = EntryPredicateBuilder;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let predicate_opt = match (self.predicate_opt, rhs.predicate_opt) {
+            (None, None) =>
+                None,
+            (Some(mut lhs), Some(mut rhs)) => {
+                let predicate: EntryPredicate = Box::new(move |entry| {
+                    let result = lhs(entry);
+                    if result {
+                        rhs(entry)
+                    } else {
+                        result
+                    }
+                });
+                Some(predicate)
+            }
+            (None, some_predicate) =>
+                some_predicate,
+            (some_predicate, None) =>
+                some_predicate,
+        };
+        EntryPredicateBuilder { predicate_opt }
+    }
+}
+
+impl std::ops::Not for EntryPredicateBuilder {
+    type Output = EntryPredicateBuilder;
+
+    fn not(self) -> Self::Output {
+        let predicate_opt = match self.predicate_opt {
+            Some(mut original) => {
+                let predicate: EntryPredicate = Box::new(move |entry| {
+                    let result = original(entry);
+                    !result
+                });
+                Some(predicate)
+            }
+            None =>
+                None,
+        };
+        EntryPredicateBuilder { predicate_opt }
+    }
+}
 
 impl DuplicateFilterFields {
     fn hash_source(entry: &Entry) -> u64 {
@@ -46,8 +156,10 @@ impl DuplicateFilterFields {
         entry.arguments.hash(&mut s);
         s.finish()
     }
+}
 
-    fn hash(&self) -> fn(&Entry) -> u64 {
+impl Into<fn(&Entry) -> u64> for DuplicateFilterFields {
+    fn into(self) -> fn(&Entry) -> u64 {
         match self {
             DuplicateFilterFields::FileOnly =>
                 DuplicateFilterFields::hash_source,
@@ -59,32 +171,124 @@ impl DuplicateFilterFields {
     }
 }
 
-type EntryFilterPredicate = Box<dyn FnMut(&Entry) -> bool>;
+#[cfg(test)]
+mod test {
+    use crate::vec_of_strings;
+    use super::*;
 
-impl Into<EntryFilterPredicate> for DuplicateFilterFields {
-    fn into(self) -> EntryFilterPredicate {
-        let mut have_seen = HashSet::new();
-        let hash_calculation = DuplicateFilterFields::hash(&self);
+    #[test]
+    fn test_duplicate_detection_works() {
+        let input: Vec<Entry> = vec![
+            Entry {
+                file: PathBuf::from("/home/user/project/source.c"),
+                arguments: vec_of_strings!["cc", "-c", "source.c"],
+                directory: PathBuf::from("/home/user/project"),
+                output: Some(PathBuf::from("/home/user/project/source.o")),
+            },
+            Entry {
+                file: PathBuf::from("/home/user/project/source.c"),
+                arguments: vec_of_strings!["cc", "-c", "-Wall", "source.c"],
+                directory: PathBuf::from("/home/user/project"),
+                output: Some(PathBuf::from("/home/user/project/source.o")),
+            },
+            Entry {
+                file: PathBuf::from("/home/user/project/test.c"),
+                arguments: vec_of_strings!["cc", "-c", "test.c"],
+                directory: PathBuf::from("/home/user/project"),
+                output: Some(PathBuf::from("/home/user/project/test.o")),
+            },
+        ];
 
-        Box::new(move |entry| {
-            let hash = hash_calculation(&entry);
-            if !have_seen.contains(&hash) {
-                have_seen.insert(hash);
-                true
-            } else {
-                false
-            }
-        })
+        let expected: Vec<Entry> = vec![
+            Entry {
+                file: PathBuf::from("/home/user/project/source.c"),
+                arguments: vec_of_strings!["cc", "-c", "source.c"],
+                directory: PathBuf::from("/home/user/project"),
+                output: Some(PathBuf::from("/home/user/project/source.o")),
+            },
+            Entry {
+                file: PathBuf::from("/home/user/project/test.c"),
+                arguments: vec_of_strings!["cc", "-c", "test.c"],
+                directory: PathBuf::from("/home/user/project"),
+                output: Some(PathBuf::from("/home/user/project/test.o")),
+            },
+        ];
+
+        let sut: EntryPredicate = Content::default().into();
+        let result: Vec<Entry> = input.into_iter().filter(sut).collect();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_exclude_include_works() {
+        let configs: Vec<Content> = vec![
+            Content {
+                include_only_existing_source: false,
+                duplicate_filter_fields: DuplicateFilterFields::default(),
+                paths_to_include: vec![PathBuf::from("/home/user/project/source")],
+                paths_to_exclude: vec![PathBuf::from("/home/user/project/test")],
+            },
+            Content {
+                include_only_existing_source: false,
+                duplicate_filter_fields: DuplicateFilterFields::default(),
+                paths_to_include: vec![PathBuf::from("/home/user/project/source/")],
+                paths_to_exclude: vec![PathBuf::from("/home/user/project/test/")],
+            },
+            Content {
+                include_only_existing_source: false,
+                duplicate_filter_fields: DuplicateFilterFields::default(),
+                paths_to_include: vec![PathBuf::from("/home/user/project")],
+                paths_to_exclude: vec![PathBuf::from("/home/user/project/test")],
+            },
+            Content {
+                include_only_existing_source: false,
+                duplicate_filter_fields: DuplicateFilterFields::default(),
+                paths_to_include: vec![PathBuf::from("/home/user/project/")],
+                paths_to_exclude: vec![PathBuf::from("/home/user/project/test/")],
+            },
+        ];
+
+        for config in configs {
+            let input: Vec<Entry> = vec![
+                Entry {
+                    file: PathBuf::from("/home/user/project/source/source.c"),
+                    arguments: vec_of_strings!["cc", "-c", "source.c"],
+                    directory: PathBuf::from("/home/user/project"),
+                    output: Some(PathBuf::from("/home/user/project/source/source.o")),
+                },
+                Entry {
+                    file: PathBuf::from("/home/user/project/source/source.c"),
+                    arguments: vec_of_strings!["cc", "-c", "-Wall", "source.c"],
+                    directory: PathBuf::from("/home/user/project"),
+                    output: Some(PathBuf::from("/home/user/project/source/source.o")),
+                },
+                Entry {
+                    file: PathBuf::from("/home/user/project/test/source.c"),
+                    arguments: vec_of_strings!["cc", "-c", "test.c"],
+                    directory: PathBuf::from("/home/user/project"),
+                    output: Some(PathBuf::from("/home/user/project/test/source.o")),
+                },
+            ];
+
+            let expected: Vec<Entry> = vec![
+                Entry {
+                    file: PathBuf::from("/home/user/project/source/source.c"),
+                    arguments: vec_of_strings!["cc", "-c", "source.c"],
+                    directory: PathBuf::from("/home/user/project"),
+                    output: Some(PathBuf::from("/home/user/project/source/source.o")),
+                },
+            ];
+
+            let sut: EntryPredicate = config.into();
+            let result: Vec<Entry> = input.into_iter().filter(sut).collect();
+            assert_eq!(expected, result);
+        }
     }
 }
 
-impl Into<EntryFilterPredicate> for Content {
-    fn into(self) -> EntryFilterPredicate {
-        let duplicates: EntryFilterPredicate = self.duplicate_filter_fields.into();
-
-        Box::new(move |entry| {
-            let source_check: EntryFilterPredicate = todo!();
-            todo!()
-        })
+mod fixtures {
+    #[macro_export]
+    macro_rules! vec_of_strings {
+        ($($x:expr),*) => (vec![$($x.to_string()),*]);
     }
 }
