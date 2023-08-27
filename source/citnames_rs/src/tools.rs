@@ -116,7 +116,7 @@ impl Tool for ExcludeOr {
                 return NotRecognized;
             }
         }
-        return self.or.recognize(x);
+        self.or.recognize(x)
     }
 }
 

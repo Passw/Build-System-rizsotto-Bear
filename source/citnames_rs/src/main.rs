@@ -139,7 +139,7 @@ fn old_entries_from_previous_run(sink: &Sender<Entry>, source: &str) -> Result<(
                 sink.send(value)?;
                 count += 1;
             }
-            Err(error) => {
+            Err(_error) => {
                 // todo
                 log::error!("")
             }
@@ -150,8 +150,8 @@ fn old_entries_from_previous_run(sink: &Sender<Entry>, source: &str) -> Result<(
     Ok(())
 }
 
-fn new_entries_from_events(sink: &Sender<Entry>, input: &str) -> Result<u32> {
-    let (exec_snd, exec_rcv) = unbounded::<Execution>();
+fn new_entries_from_events(_sink: &Sender<Entry>, _input: &str) -> Result<u32> {
+    let (_exec_snd, _exec_rcv) = unbounded::<Execution>();
 
     // log::debug!("Found {new_entries} entries");
 

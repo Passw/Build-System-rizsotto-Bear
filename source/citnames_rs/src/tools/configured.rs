@@ -18,7 +18,6 @@
  */
 
 use std::path::PathBuf;
-use lazy_static::lazy_static;
 
 use crate::configuration::CompilerToRecognize;
 use crate::execution::Execution;
@@ -37,7 +36,7 @@ impl Configured {
     }
 
     pub(crate) fn from(configs: &[CompilerToRecognize]) -> Box<dyn Tool> {
-        Any::new(configs.into_iter().map(Configured::new).collect())
+        Any::new(configs.iter().map(Configured::new).collect())
     }
 }
 
@@ -50,7 +49,7 @@ impl Tool for Configured {
 
             // find sources and filter out requested flags.
             for argument in x.arguments.iter().skip(1) {
-                if self.config.flags_to_remove.contains(&argument) {
+                if self.config.flags_to_remove.contains(argument) {
                     continue;
                 } else if looks_like_a_source_file(argument.as_str()) {
                     sources.push(PathBuf::from(argument));
@@ -89,6 +88,9 @@ impl Tool for Configured {
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
+
+    use lazy_static::lazy_static;
+
     use crate::tools::Semantic::Compiler;
 
     use super::*;

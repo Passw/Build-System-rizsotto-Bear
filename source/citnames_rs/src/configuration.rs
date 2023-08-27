@@ -122,19 +122,16 @@ fn enabled() -> bool {
 }
 
 /// Represents how the duplicate filtering detects duplicate entries.
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(try_from = "String")]
 pub enum DuplicateFilterFields {
     FileOnly,
+    #[default]
     FileAndOutputOnly,
     All,
 }
 
-impl Default for DuplicateFilterFields {
-    fn default() -> Self {
-        DuplicateFilterFields::FileAndOutputOnly
-    }
-}
+
 
 impl TryFrom<String> for DuplicateFilterFields {
     type Error = String;

@@ -22,11 +22,11 @@ use lazy_static::lazy_static;
 
 pub fn looks_like_a_source_file(argument: &str) -> bool {
     // unix flags
-    if argument.starts_with("-") {
+    if argument.starts_with('-') {
         return false;
     }
     // windows flags
-    if argument.starts_with("/") {
+    if argument.starts_with('/') {
         return false;
     }
     if let Some((_, extension)) = argument.rsplit_once('.') {

@@ -28,12 +28,12 @@ use crate::configuration::{Content, DuplicateFilterFields};
 
 pub(crate) type EntryPredicate = Box<dyn FnMut(&Entry) -> bool>;
 
-impl Into<EntryPredicate> for Content {
-    fn into(self) -> EntryPredicate {
-        let source_check = EntryPredicateBuilder::source_check(self.include_only_existing_source);
-        let paths_to_include = EntryPredicateBuilder::contains(self.paths_to_include);
-        let paths_to_exclude = EntryPredicateBuilder::contains(self.paths_to_exclude);
-        let duplicates = EntryPredicateBuilder::duplicates(self.duplicate_filter_fields);
+impl From<Content> for EntryPredicate {
+    fn from(val: Content) -> Self {
+        let source_check = EntryPredicateBuilder::source_check(val.include_only_existing_source);
+        let paths_to_include = EntryPredicateBuilder::contains(val.paths_to_include);
+        let paths_to_exclude = EntryPredicateBuilder::contains(val.paths_to_exclude);
+        let duplicates = EntryPredicateBuilder::duplicates(val.duplicate_filter_fields);
 
         (!paths_to_exclude & paths_to_include & source_check & duplicates).build()
     }
@@ -77,7 +77,7 @@ impl EntryPredicateBuilder {
         let mut have_seen = HashSet::new();
 
         let predicate: EntryPredicate = Box::new(move |entry| {
-            let hash = hash_function(&entry);
+            let hash = hash_function(entry);
             if !have_seen.contains(&hash) {
                 have_seen.insert(hash);
                 true
@@ -158,9 +158,9 @@ impl DuplicateFilterFields {
     }
 }
 
-impl Into<fn(&Entry) -> u64> for DuplicateFilterFields {
-    fn into(self) -> fn(&Entry) -> u64 {
-        match self {
+impl From<DuplicateFilterFields> for fn(&Entry) -> u64 {
+    fn from(val: DuplicateFilterFields) -> Self {
+        match val {
             DuplicateFilterFields::FileOnly =>
                 DuplicateFilterFields::hash_source,
             DuplicateFilterFields::FileAndOutputOnly =>
