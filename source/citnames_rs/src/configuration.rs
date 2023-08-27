@@ -164,36 +164,37 @@ pub mod io {
 
     #[cfg(test)]
     mod test {
+        use crate::{vec_of_pathbuf, vec_of_strings};
         use super::*;
 
         #[test]
         fn test_full_config() {
             let content: &[u8] = br#"{
-            "output": {
-                "format": {
-                    "command_as_array": true,
-                    "drop_output_field": false
-                },
-                "content": {
-                    "include_only_existing_source": false,
-                    "duplicate_filter_fields": "all",
-                    "paths_to_include": ["sources"],
-                    "paths_to_exclude": ["tests"]
-                }
-            },
-            "compilation": {
-                "compilers_to_recognize": [
-                    {
-                        "executable": "/usr/local/bin/clang",
-                        "flags_to_add": ["-Dfoo=bar"],
-                        "flags_to_remove": ["-Wall"]
+                "output": {
+                    "format": {
+                        "command_as_array": true,
+                        "drop_output_field": false
+                    },
+                    "content": {
+                        "include_only_existing_source": false,
+                        "duplicate_filter_fields": "all",
+                        "paths_to_include": ["sources"],
+                        "paths_to_exclude": ["tests"]
                     }
-                ],
-                "compilers_to_exclude": [
-                    "clang"
-                ]
-            }
-        }"#;
+                },
+                "compilation": {
+                    "compilers_to_recognize": [
+                        {
+                            "executable": "/usr/local/bin/clang",
+                            "flags_to_add": ["-Dfoo=bar"],
+                            "flags_to_remove": ["-Wall"]
+                        }
+                    ],
+                    "compilers_to_exclude": [
+                        "clang"
+                    ]
+                }
+            }"#;
 
             let result = from_reader(content).unwrap();
 
@@ -206,19 +207,19 @@ pub mod io {
                     content: Content {
                         include_only_existing_source: false,
                         duplicate_filter_fields: DuplicateFilterFields::All,
-                        paths_to_include: vec![PathBuf::from("sources")],
-                        paths_to_exclude: vec![PathBuf::from("tests")],
+                        paths_to_include: vec_of_pathbuf!["sources"],
+                        paths_to_exclude: vec_of_pathbuf!["tests"],
                     },
                 },
                 compilation: Compilation {
                     compilers_to_recognize: vec![
                         CompilerToRecognize {
                             executable: PathBuf::from("/usr/local/bin/clang"),
-                            flags_to_add: vec![String::from("-Dfoo=bar")],
-                            flags_to_remove: vec![String::from("-Wall")],
+                            flags_to_add: vec_of_strings!["-Dfoo=bar"],
+                            flags_to_remove: vec_of_strings!["-Wall"],
                         }
                     ],
-                    compilers_to_exclude: vec![PathBuf::from("clang")],
+                    compilers_to_exclude: vec_of_pathbuf!["clang"],
                 },
             };
 
@@ -228,15 +229,15 @@ pub mod io {
         #[test]
         fn test_only_output_config() {
             let content: &[u8] = br#"{
-            "output": {
-                "format": {
-                    "command_as_array": false
-                },
-                "content": {
-                    "duplicate_filter_fields": "file"
+                "output": {
+                    "format": {
+                        "command_as_array": false
+                    },
+                    "content": {
+                        "duplicate_filter_fields": "file"
+                    }
                 }
-            }
-        }"#;
+            }"#;
 
             let result = from_reader(content).unwrap();
 
@@ -249,8 +250,8 @@ pub mod io {
                     content: Content {
                         include_only_existing_source: false,
                         duplicate_filter_fields: DuplicateFilterFields::FileOnly,
-                        paths_to_include: vec![],
-                        paths_to_exclude: vec![],
+                        paths_to_include: vec_of_pathbuf![],
+                        paths_to_exclude: vec_of_pathbuf![],
                     },
                 },
                 compilation: Compilation::default(),
@@ -262,20 +263,20 @@ pub mod io {
         #[test]
         fn test_compilation_only_config() {
             let content: &[u8] = br#"{
-            "compilation": {
-                "compilers_to_recognize": [
-                    {
-                        "executable": "/usr/local/bin/clang"
-                    },
-                    {
-                        "executable": "/usr/local/bin/clang++"
-                    }
-                ],
-                "compilers_to_exclude": [
-                    "clang", "clang++"
-                ]
-            }
-        }"#;
+                "compilation": {
+                    "compilers_to_recognize": [
+                        {
+                            "executable": "/usr/local/bin/clang"
+                        },
+                        {
+                            "executable": "/usr/local/bin/clang++"
+                        }
+                    ],
+                    "compilers_to_exclude": [
+                        "clang", "clang++"
+                    ]
+                }
+            }"#;
 
             let result = from_reader(content).unwrap();
 
@@ -294,7 +295,7 @@ pub mod io {
                             flags_to_remove: vec![],
                         },
                     ],
-                    compilers_to_exclude: vec![PathBuf::from("clang"), PathBuf::from("clang++")],
+                    compilers_to_exclude: vec_of_pathbuf!["clang", "clang++"],
                 },
             };
 

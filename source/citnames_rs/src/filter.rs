@@ -173,7 +173,7 @@ impl Into<fn(&Entry) -> u64> for DuplicateFilterFields {
 
 #[cfg(test)]
 mod test {
-    use crate::vec_of_strings;
+    use crate::{vec_of_pathbuf, vec_of_strings};
     use super::*;
 
     #[test]
@@ -225,26 +225,26 @@ mod test {
             Content {
                 include_only_existing_source: false,
                 duplicate_filter_fields: DuplicateFilterFields::default(),
-                paths_to_include: vec![PathBuf::from("/home/user/project/source")],
-                paths_to_exclude: vec![PathBuf::from("/home/user/project/test")],
+                paths_to_include: vec_of_pathbuf!["/home/user/project/source"],
+                paths_to_exclude: vec_of_pathbuf!["/home/user/project/test"],
             },
             Content {
                 include_only_existing_source: false,
                 duplicate_filter_fields: DuplicateFilterFields::default(),
-                paths_to_include: vec![PathBuf::from("/home/user/project/source/")],
-                paths_to_exclude: vec![PathBuf::from("/home/user/project/test/")],
+                paths_to_include: vec_of_pathbuf!["/home/user/project/source/"],
+                paths_to_exclude: vec_of_pathbuf!["/home/user/project/test/"],
             },
             Content {
                 include_only_existing_source: false,
                 duplicate_filter_fields: DuplicateFilterFields::default(),
-                paths_to_include: vec![PathBuf::from("/home/user/project")],
-                paths_to_exclude: vec![PathBuf::from("/home/user/project/test")],
+                paths_to_include: vec_of_pathbuf!["/home/user/project"],
+                paths_to_exclude: vec_of_pathbuf!["/home/user/project/test"],
             },
             Content {
                 include_only_existing_source: false,
                 duplicate_filter_fields: DuplicateFilterFields::default(),
-                paths_to_include: vec![PathBuf::from("/home/user/project/")],
-                paths_to_exclude: vec![PathBuf::from("/home/user/project/test/")],
+                paths_to_include: vec_of_pathbuf!["/home/user/project/"],
+                paths_to_exclude: vec_of_pathbuf!["/home/user/project/test/"],
             },
         ];
 
@@ -283,12 +283,5 @@ mod test {
             let result: Vec<Entry> = input.into_iter().filter(sut).collect();
             assert_eq!(expected, result);
         }
-    }
-}
-
-mod fixtures {
-    #[macro_export]
-    macro_rules! vec_of_strings {
-        ($($x:expr),*) => (vec![$($x.to_string()),*]);
     }
 }

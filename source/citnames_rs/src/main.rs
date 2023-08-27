@@ -41,6 +41,7 @@ mod execution;
 mod compilation;
 mod tools;
 mod filter;
+mod fixtures;
 
 
 fn main() -> Result<()> {

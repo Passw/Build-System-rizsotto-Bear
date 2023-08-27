@@ -132,9 +132,7 @@ impl From<Compilation> for Box<dyn Tool> {
 mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
-
-    use crate::tools::CompilerCall::Query;
-    use crate::tools::test::MockTool::Recognize;
+    use crate::vec_of_pathbuf;
 
     use super::*;
 
@@ -196,8 +194,8 @@ mod test {
     #[test]
     fn test_exclude_when_match() {
         let sut = ExcludeOr {
-            excludes: vec![PathBuf::from("/usr/bin/something")],
-            or: Box::new(Recognize),
+            excludes: vec_of_pathbuf!["/usr/bin/something"],
+            or: Box::new(MockTool::Recognize),
         };
 
         let input = Execution {
@@ -216,8 +214,8 @@ mod test {
     #[test]
     fn test_exclude_when_no_match() {
         let sut = ExcludeOr {
-            excludes: vec![PathBuf::from("/usr/bin/something")],
-            or: Box::new(Recognize),
+            excludes: vec_of_pathbuf!["/usr/bin/something"],
+            or: Box::new(MockTool::Recognize),
         };
 
         let input = any_execution();
@@ -238,7 +236,7 @@ mod test {
         fn recognize(&self, _: &Execution) -> RecognitionResult {
             match self {
                 MockTool::Recognize =>
-                    Recognized(Ok(Semantic::Compiler(Query))),
+                    Recognized(Ok(Semantic::Compiler(CompilerCall::Query))),
                 MockTool::RecognizeFailed =>
                     Recognized(Err(String::from("problem"))),
                 MockTool::NotRecognize =>

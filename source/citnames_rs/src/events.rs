@@ -88,6 +88,7 @@ fn into_execution(value: Value) -> Option<Execution> {
 mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
+    use crate::vec_of_strings;
 
     use super::*;
 
@@ -173,11 +174,11 @@ mod test {
 
         let expected = Execution {
             executable: PathBuf::from("/usr/bin/sh"),
-            arguments: vec![
+            arguments: vec_of_strings![
                 "sh",
                 "-c",
-                "ls",
-            ].iter().map(|s| s.to_string()).collect(),
+                "ls"
+            ],
             working_dir: PathBuf::from("/var/home/lnagy/Code/Bear.git"),
             environment: HashMap::from([
                 ("COLORTERM".to_string(), "truecolor".to_string()),
@@ -193,7 +194,7 @@ mod test {
 
         let expected = Execution {
             executable: PathBuf::from("/usr/bin/ls"),
-            arguments: vec!["ls".to_string()],
+            arguments: vec_of_strings!["ls"],
             working_dir: PathBuf::from("/var/home/lnagy/Code/Bear.git"),
             environment: HashMap::from([
                 ("COLORTERM".to_string(), "truecolor".to_string()),

@@ -84,6 +84,7 @@ fn into_string(path: &PathBuf) -> Result<String> {
 
 #[cfg(test)]
 mod test {
+    use crate::{vec_of_pathbuf, vec_of_strings};
     use super::*;
 
     #[test]
@@ -104,8 +105,8 @@ mod test {
         let input = CompilerCall::Compile {
             working_dir: PathBuf::from("/home/user"),
             compiler: PathBuf::from("clang"),
-            flags: vec![String::from("-Wall")],
-            sources: vec![PathBuf::from("source.c")],
+            flags: vec_of_strings!["-Wall"],
+            sources: vec_of_pathbuf!["source.c"],
             output: Some(PathBuf::from("source.o")),
         };
 
@@ -113,10 +114,7 @@ mod test {
             Entry {
                 directory: PathBuf::from("/home/user"),
                 file: PathBuf::from("/home/user/source.c"),
-                arguments: vec!["clang", "-Wall", "-o", "source.o", "source.c"]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
+                arguments: vec_of_strings!["clang", "-Wall", "-o", "source.o", "source.c"],
                 output: Some(PathBuf::from("/home/user/source.o")),
             }
         ];
@@ -133,8 +131,8 @@ mod test {
         let input = CompilerCall::Compile {
             working_dir: PathBuf::from("/home/user"),
             compiler: PathBuf::from("clang"),
-            flags: vec![String::from("-Wall")],
-            sources: vec![PathBuf::from("/tmp/source1.c"), PathBuf::from("../source2.c")],
+            flags: vec_of_strings!["-Wall"],
+            sources: vec_of_pathbuf!["/tmp/source1.c", "../source2.c"],
             output: None,
         };
 
@@ -142,19 +140,13 @@ mod test {
             Entry {
                 directory: PathBuf::from("/home/user"),
                 file: PathBuf::from("/tmp/source1.c"),
-                arguments: vec!["clang", "-Wall", "/tmp/source1.c"]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
+                arguments: vec_of_strings!["clang", "-Wall", "/tmp/source1.c"],
                 output: None,
             },
             Entry {
                 directory: PathBuf::from("/home/user"),
                 file: PathBuf::from("/home/source2.c"),
-                arguments: vec!["clang", "-Wall", "../source2.c"]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
+                arguments: vec_of_strings!["clang", "-Wall", "../source2.c"],
                 output: None,
             },
         ];
