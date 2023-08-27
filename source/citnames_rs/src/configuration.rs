@@ -45,7 +45,6 @@ pub struct Compilation {
 // be a known compiler, and append the additional flags to the output
 // entry if the compiler is recognized.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-// fixme: remove clone and use reference in `Configured`
 pub struct CompilerToRecognize {
     pub executable: PathBuf,
     #[serde(default)]

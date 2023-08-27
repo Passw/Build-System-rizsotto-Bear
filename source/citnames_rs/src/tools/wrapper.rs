@@ -23,8 +23,8 @@ use crate::tools::{RecognitionResult, Tool};
 pub(crate) struct Wrapper {}
 
 impl Wrapper {
-    pub(crate) fn new() -> Self {
-        Wrapper {}
+    pub(crate) fn new() -> Box<dyn Tool> {
+        Box::new(Wrapper {})
     }
 }
 

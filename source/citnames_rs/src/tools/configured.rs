@@ -32,15 +32,12 @@ pub(crate) struct Configured {
 }
 
 impl Configured {
-    pub(crate) fn new(config: CompilerToRecognize) -> Self {
-        Configured { config }
+    pub(crate) fn new(config: &CompilerToRecognize) -> Box<dyn Tool> {
+        Box::new(Configured { config: config.clone() })
     }
 
-    pub(crate) fn from(configs: Vec<CompilerToRecognize>) -> impl Tool {
-        let tools: Vec<Box<dyn Tool>> = configs.into_iter()
-            .map(|config| -> Box<dyn Tool> { Box::new(Configured::new(config)) })
-            .collect();
-        Any { tools }
+    pub(crate) fn from(configs: &[CompilerToRecognize]) -> Box<dyn Tool> {
+        Any::new(configs.into_iter().map(Configured::new).collect())
     }
 }
 

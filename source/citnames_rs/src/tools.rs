@@ -69,6 +69,12 @@ struct Any {
     tools: Vec<Box<dyn Tool>>,
 }
 
+impl Any {
+    fn new(tools: Vec<Box<dyn Tool>>) -> Box<dyn Tool> {
+        Box::new(Any { tools })
+    }
+}
+
 impl Tool for Any {
     /// Any of the tool recognize the semantic, will be returned as result.
     fn recognize(&self, x: &Execution) -> RecognitionResult {
@@ -89,6 +95,18 @@ struct ExcludeOr {
     or: Box<dyn Tool>,
 }
 
+impl ExcludeOr {
+    fn new(excludes: &[PathBuf], tools: Vec<Box<dyn Tool>>) -> Box<dyn Tool> {
+        Box::new(
+            ExcludeOr {
+                // exclude the executables are explicitly mentioned in the config file.
+                excludes: Vec::from(excludes),
+                or: Any::new(tools),
+            }
+        )
+    }
+}
+
 impl Tool for ExcludeOr {
     /// Check if the executable is on the exclude list, return as not recognized.
     /// Otherwise delegate the recognition to the tool given.
@@ -102,29 +120,24 @@ impl Tool for ExcludeOr {
     }
 }
 
-impl From<Compilation> for Box<dyn Tool> {
-    fn from(value: Compilation) -> Self {
+impl From<&Compilation> for Box<dyn Tool> {
+    fn from(value: &Compilation) -> Self {
+        // Build the list of known compilers we will recognize by default.
         let mut tools = vec![
-            Box::new(Wrapper::new()) as Box<dyn Tool>,
+            Wrapper::new(),
         ];
 
         // The hinted tools should be the first to recognize.
         if !value.compilers_to_recognize.is_empty() {
-            let configured = Configured::from(value.compilers_to_recognize);
-            tools.insert(0, Box::new(configured))
+            let configured = Configured::from(&value.compilers_to_recognize);
+            tools.insert(0, configured)
         }
         // Excluded compiler check should be done before anything.
-        if !value.compilers_to_exclude.is_empty() {
-            return Box::new(
-                ExcludeOr {
-                    // exclude the executables are explicitly mentioned in the config file.
-                    excludes: value.compilers_to_exclude,
-                    or: Box::new(Any { tools }),
-                }
-            );
+        if value.compilers_to_exclude.is_empty() {
+            Any::new(tools)
+        } else {
+            ExcludeOr::new(&value.compilers_to_exclude, tools)
         }
-        // Return the tools we configured.
-        Box::new(Any { tools })
     }
 }
 
