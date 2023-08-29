@@ -34,12 +34,12 @@ pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item=Result<Exec
             match value {
                 Ok(value) => {
                     match into_execution(value) {
-                        None => vec![],
-                        Some(result) => vec![Ok(result)]
+                        None => None,
+                        Some(result) => Some(Ok(result))
                     }
                 }
                 Err(error) =>
-                    vec![Err(error)],
+                    Some(Err(error)),
             }
         })
 }

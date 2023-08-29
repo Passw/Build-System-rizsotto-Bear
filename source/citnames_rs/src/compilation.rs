@@ -31,6 +31,7 @@ impl TryFrom<CompilerCall> for Vec<Entry> {
     fn try_from(value: CompilerCall) -> Result<Self, Self::Error> {
         match value {
             CompilerCall::Compile { working_dir, compiler, flags, sources, output } =>
+                // todo: should error when sources are empty?
                 sources.iter()
                     .map(|source| -> Result<Entry, Self::Error> {
                         let mut arguments: Vec<String> = vec![];

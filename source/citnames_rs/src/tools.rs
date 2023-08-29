@@ -30,7 +30,7 @@ mod wrapper;
 mod matchers;
 
 /// This abstraction is representing a tool which is known by us.
-pub(crate) trait Tool {
+pub(crate) trait Tool: Send {
     /// A tool has a potential to recognize a command execution and identify
     /// the semantic of that command.
     fn recognize(&self, _: &Execution) -> RecognitionResult;

@@ -131,8 +131,6 @@ pub enum DuplicateFilterFields {
     All,
 }
 
-
-
 impl TryFrom<String> for DuplicateFilterFields {
     type Error = String;
 
@@ -150,173 +148,164 @@ impl TryFrom<String> for DuplicateFilterFields {
     }
 }
 
-pub mod io {
+#[cfg(test)]
+mod test {
+    use crate::{vec_of_pathbuf, vec_of_strings};
     use super::*;
 
-    /// Load the content of the given stream and parse it as Configuration.
-    pub fn from_reader(reader: impl std::io::Read) -> Result<Configuration, serde_json::Error> {
-        serde_json::from_reader(reader)
+    #[test]
+    fn test_full_config() {
+        let content: &[u8] = br#"{
+            "output": {
+                "format": {
+                    "command_as_array": true,
+                    "drop_output_field": false
+                },
+                "content": {
+                    "include_only_existing_source": false,
+                    "duplicate_filter_fields": "all",
+                    "paths_to_include": ["sources"],
+                    "paths_to_exclude": ["tests"]
+                }
+            },
+            "compilation": {
+                "compilers_to_recognize": [
+                    {
+                        "executable": "/usr/local/bin/clang",
+                        "flags_to_add": ["-Dfoo=bar"],
+                        "flags_to_remove": ["-Wall"]
+                    }
+                ],
+                "compilers_to_exclude": [
+                    "clang"
+                ]
+            }
+        }"#;
+
+        let result = serde_json::from_reader(content).unwrap();
+
+        let expected = Configuration {
+            output: Output {
+                format: Format {
+                    command_as_array: true,
+                    drop_output_field: false,
+                },
+                content: Content {
+                    include_only_existing_source: false,
+                    duplicate_filter_fields: DuplicateFilterFields::All,
+                    paths_to_include: vec_of_pathbuf!["sources"],
+                    paths_to_exclude: vec_of_pathbuf!["tests"],
+                },
+            },
+            compilation: Compilation {
+                compilers_to_recognize: vec![
+                    CompilerToRecognize {
+                        executable: PathBuf::from("/usr/local/bin/clang"),
+                        flags_to_add: vec_of_strings!["-Dfoo=bar"],
+                        flags_to_remove: vec_of_strings!["-Wall"],
+                    }
+                ],
+                compilers_to_exclude: vec_of_pathbuf!["clang"],
+            },
+        };
+
+        assert_eq!(expected, result);
     }
 
-    #[cfg(test)]
-    mod test {
-        use crate::{vec_of_pathbuf, vec_of_strings};
-        use super::*;
+    #[test]
+    fn test_only_output_config() {
+        let content: &[u8] = br#"{
+            "output": {
+                "format": {
+                    "command_as_array": false
+                },
+                "content": {
+                    "duplicate_filter_fields": "file"
+                }
+            }
+        }"#;
 
-        #[test]
-        fn test_full_config() {
-            let content: &[u8] = br#"{
-                "output": {
-                    "format": {
-                        "command_as_array": true,
-                        "drop_output_field": false
+        let result = serde_json::from_reader(content).unwrap();
+
+        let expected = Configuration {
+            output: Output {
+                format: Format {
+                    command_as_array: false,
+                    drop_output_field: false,
+                },
+                content: Content {
+                    include_only_existing_source: false,
+                    duplicate_filter_fields: DuplicateFilterFields::FileOnly,
+                    paths_to_include: vec_of_pathbuf![],
+                    paths_to_exclude: vec_of_pathbuf![],
+                },
+            },
+            compilation: Compilation::default(),
+        };
+
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_compilation_only_config() {
+        let content: &[u8] = br#"{
+            "compilation": {
+                "compilers_to_recognize": [
+                    {
+                        "executable": "/usr/local/bin/clang"
                     },
-                    "content": {
-                        "include_only_existing_source": false,
-                        "duplicate_filter_fields": "all",
-                        "paths_to_include": ["sources"],
-                        "paths_to_exclude": ["tests"]
+                    {
+                        "executable": "/usr/local/bin/clang++"
                     }
+                ],
+                "compilers_to_exclude": [
+                    "clang", "clang++"
+                ]
+            }
+        }"#;
+
+        let result = serde_json::from_reader(content).unwrap();
+
+        let expected = Configuration {
+            output: Output::default(),
+            compilation: Compilation {
+                compilers_to_recognize: vec![
+                    CompilerToRecognize {
+                        executable: PathBuf::from("/usr/local/bin/clang"),
+                        flags_to_add: vec![],
+                        flags_to_remove: vec![],
+                    },
+                    CompilerToRecognize {
+                        executable: PathBuf::from("/usr/local/bin/clang++"),
+                        flags_to_add: vec![],
+                        flags_to_remove: vec![],
+                    },
+                ],
+                compilers_to_exclude: vec_of_pathbuf!["clang", "clang++"],
+            },
+        };
+
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_failing_config() {
+        let content: &[u8] = br#"{
+            "output": {
+                "format": {
+                    "command_as_array": false
                 },
-                "compilation": {
-                    "compilers_to_recognize": [
-                        {
-                            "executable": "/usr/local/bin/clang",
-                            "flags_to_add": ["-Dfoo=bar"],
-                            "flags_to_remove": ["-Wall"]
-                        }
-                    ],
-                    "compilers_to_exclude": [
-                        "clang"
-                    ]
+                "content": {
+                    "duplicate_filter_fields": "files"
                 }
-            }"#;
+            }
+        }"#;
 
-            let result = from_reader(content).unwrap();
+        let result: Result<Configuration, serde_json::Error> = serde_json::from_reader(content);
 
-            let expected = Configuration {
-                output: Output {
-                    format: Format {
-                        command_as_array: true,
-                        drop_output_field: false,
-                    },
-                    content: Content {
-                        include_only_existing_source: false,
-                        duplicate_filter_fields: DuplicateFilterFields::All,
-                        paths_to_include: vec_of_pathbuf!["sources"],
-                        paths_to_exclude: vec_of_pathbuf!["tests"],
-                    },
-                },
-                compilation: Compilation {
-                    compilers_to_recognize: vec![
-                        CompilerToRecognize {
-                            executable: PathBuf::from("/usr/local/bin/clang"),
-                            flags_to_add: vec_of_strings!["-Dfoo=bar"],
-                            flags_to_remove: vec_of_strings!["-Wall"],
-                        }
-                    ],
-                    compilers_to_exclude: vec_of_pathbuf!["clang"],
-                },
-            };
+        assert!(result.is_err());
 
-            assert_eq!(expected, result);
-        }
-
-        #[test]
-        fn test_only_output_config() {
-            let content: &[u8] = br#"{
-                "output": {
-                    "format": {
-                        "command_as_array": false
-                    },
-                    "content": {
-                        "duplicate_filter_fields": "file"
-                    }
-                }
-            }"#;
-
-            let result = from_reader(content).unwrap();
-
-            let expected = Configuration {
-                output: Output {
-                    format: Format {
-                        command_as_array: false,
-                        drop_output_field: false,
-                    },
-                    content: Content {
-                        include_only_existing_source: false,
-                        duplicate_filter_fields: DuplicateFilterFields::FileOnly,
-                        paths_to_include: vec_of_pathbuf![],
-                        paths_to_exclude: vec_of_pathbuf![],
-                    },
-                },
-                compilation: Compilation::default(),
-            };
-
-            assert_eq!(expected, result);
-        }
-
-        #[test]
-        fn test_compilation_only_config() {
-            let content: &[u8] = br#"{
-                "compilation": {
-                    "compilers_to_recognize": [
-                        {
-                            "executable": "/usr/local/bin/clang"
-                        },
-                        {
-                            "executable": "/usr/local/bin/clang++"
-                        }
-                    ],
-                    "compilers_to_exclude": [
-                        "clang", "clang++"
-                    ]
-                }
-            }"#;
-
-            let result = from_reader(content).unwrap();
-
-            let expected = Configuration {
-                output: Output::default(),
-                compilation: Compilation {
-                    compilers_to_recognize: vec![
-                        CompilerToRecognize {
-                            executable: PathBuf::from("/usr/local/bin/clang"),
-                            flags_to_add: vec![],
-                            flags_to_remove: vec![],
-                        },
-                        CompilerToRecognize {
-                            executable: PathBuf::from("/usr/local/bin/clang++"),
-                            flags_to_add: vec![],
-                            flags_to_remove: vec![],
-                        },
-                    ],
-                    compilers_to_exclude: vec_of_pathbuf!["clang", "clang++"],
-                },
-            };
-
-            assert_eq!(expected, result);
-        }
-
-        #[test]
-        fn test_failing_config() {
-            let content: &[u8] = br#"{
-                "output": {
-                    "format": {
-                        "command_as_array": false
-                    },
-                    "content": {
-                        "duplicate_filter_fields": "files"
-                    }
-                }
-            }"#;
-
-            let result = from_reader(content);
-
-            assert!(result.is_err());
-
-            let message = result.unwrap_err().to_string();
-            assert_eq!("Unknown value \"files\" for duplicate filter at line 8 column 21", message);
-        }
+        let message = result.unwrap_err().to_string();
+        assert_eq!("Unknown value \"files\" for duplicate filter at line 8 column 17", message);
     }
 }

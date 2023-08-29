@@ -19,21 +19,22 @@
 
 extern crate core;
 
-use std::fs::OpenOptions;
-use std::io::stdin;
+use std::fs::{File, OpenOptions};
+use std::io::{BufReader, BufWriter, stdin, stdout};
+use std::path::PathBuf;
 use std::thread;
 
 use anyhow::{anyhow, Context, Result};
 use clap::{arg, ArgAction, ArgMatches, command};
-use crossbeam_channel::{bounded, Sender, unbounded};
+use crossbeam_channel::{bounded, Sender};
 use json_compilation_db::{Entry, read, write};
-use log::{error, LevelFilter};
+use log::LevelFilter;
 use simple_logger::SimpleLogger;
 
-use crate::configuration::Configuration;
-use crate::configuration::io::from_reader;
+use crate::configuration::{Compilation, Configuration};
 use crate::execution::Execution;
 use crate::filter::EntryPredicate;
+use crate::tools::{RecognitionResult, Semantic, Tool};
 
 mod configuration;
 mod events;
@@ -78,11 +79,9 @@ fn main() -> Result<()> {
         .unwrap_or(&false);
 
     if input == "-" && config.unwrap_or("+") == "-" {
-        error!("Both input and config reading the standard input.");
         return Err(anyhow!("Both input and config reading the standard input."));
     }
     if *append && output == "-" {
-        error!("Append can't applied to the standard output.");
         return Err(anyhow!("Append can't applied to the standard output."));
     }
 
@@ -90,50 +89,72 @@ fn main() -> Result<()> {
     let config = match config {
         Some("-") => {
             let reader = stdin();
-            from_reader(reader).context("Failed to read configuration from stdin")?
+            serde_json::from_reader(reader)
+                .context("Failed to read configuration from stdin")?
         }
         Some(file) => {
             let reader = OpenOptions::new().read(true).open(file)?;
-            from_reader(reader)
+            serde_json::from_reader(reader)
                 .with_context(|| format!("Failed to read configuration from file: {}", file))?
         }
         None =>
             Configuration::default(),
     };
 
+    // todo: When many verbose is requested, should do less parallel in order to debug easier.
     run(config, input.into(), output.into(), *append)
 }
 
 fn run(config: Configuration, input: String, output: String, append: bool) -> Result<()> {
-    let (snd, rcv) = bounded::<Entry>(100);
+    let (snd, rcv) = bounded::<Entry>(32);
 
+    // Start reading entries (in a new thread), and send them across the channel.
+    let (compilation_config, output_config) = (config.compilation, config.output);
     let captured_output = output.to_owned();
     thread::spawn(move || {
-        new_entries_from_events(&snd, input.as_str()).expect("");
-        if append {
-            old_entries_from_previous_run(&snd, captured_output.as_str()).expect("");
+        new_entries_from_events(&snd, input.as_str(), &compilation_config)
+            .expect("Failed to process events.");
+
+        if PathBuf::from(&captured_output).is_file() && append {
+            old_entries_from_previous_run(&snd, captured_output.as_str())
+                .expect("Failed to process existing compilation database");
         }
         drop(snd);
     });
 
-    // consume the entry streams here
-    let temp = format!("{}.tmp", &output);
-    {
-        let filter: EntryPredicate = config.output.content.into();
-        let file = OpenOptions::new().write(true).open(&temp)?;
-        write(file, rcv.iter().filter(filter))?;
-    }
-    std::fs::remove_file(&output)?;
-    std::fs::rename(&output, &temp)?;
+    // Start writing the entries (from the channel) to the output.
+    let filter: EntryPredicate = output_config.content.into();
+    let entries = rcv.iter()
+        .inspect(|entry| log::debug!("{:?}", entry))
+        .filter(filter);
+    match output.as_str() {
+        "-" | "/dev/stdout" =>
+            write(stdout(), entries)?,
+        _ => {
+            let temp = format!("{}.tmp", &output);
+            // Create scope for the file, so it will be closed when the scope is over.
+            {
+                let file = File::create(&temp)
+                    .with_context(|| format!("Failed to create file: {}", temp))?;
+                let buffer = BufWriter::new(file);
+                write(buffer, entries)?;
+            }
+            std::fs::rename(&temp, &output)
+                .with_context(|| format!("Failed to rename file from '{}' to '{}'.", temp, output))?;
+        }
+    };
 
     Ok(())
 }
 
 fn old_entries_from_previous_run(sink: &Sender<Entry>, source: &str) -> Result<()> {
     let mut count: u32 = 0;
-    let reader = OpenOptions::new().read(true).open(source)?;
-    let events = read(reader);
-    for event in events {
+
+    let file = OpenOptions::new().read(true).open(source)
+        .with_context(|| format!("Failed to open file: {}", source))?;
+    let buffer = BufReader::new(file);
+
+    for event in read(buffer) {
         match event {
             Ok(value) => {
                 sink.send(value)?;
@@ -150,12 +171,65 @@ fn old_entries_from_previous_run(sink: &Sender<Entry>, source: &str) -> Result<(
     Ok(())
 }
 
-fn new_entries_from_events(_sink: &Sender<Entry>, _input: &str) -> Result<u32> {
-    let (_exec_snd, _exec_rcv) = unbounded::<Execution>();
+fn new_entries_from_events(sink: &Sender<Entry>, input: &str, config: &Compilation) -> Result<()> {
+    let (snd, rcv) = bounded::<Execution>(128);
 
-    // log::debug!("Found {new_entries} entries");
+    // Start worker threads, which will process executions and create compilation database entry.
+    for _ in 0..num_cpus::get() {
+        let tool: Box<dyn Tool> = config.into();
+        let captured_sink = sink.clone();
+        let captured_source = rcv.clone();
+        thread::spawn(move || {
+            for execution in captured_source.into_iter() {
+                let result = tool.recognize(&execution);
+                match result {
+                    RecognitionResult::Recognized(Ok(Semantic::Compiler(call))) => {
+                        log::debug!("execution recognized as compiler call, {:?} : {:?}", call, execution);
+                        let entries: Result<Vec<Entry>> = call.try_into();
+                        match entries {
+                            Ok(entries) => for entry in entries {
+                                captured_sink.send(entry).expect("")
+                            }
+                            Err(error) =>
+                                log::debug!("can't convert into compilation entry: {}", error),
+                        }
+                    }
+                    RecognitionResult::Recognized(Ok(_)) =>
+                        log::debug!("execution recognized: {:?}", execution),
+                    RecognitionResult::Recognized(Err(reason)) =>
+                        log::debug!("execution recognized with failure, {:?} : {:?}", reason, execution),
+                    RecognitionResult::NotRecognized =>
+                        log::debug!("execution not recognized: {:?}", execution),
+                }
+            }
+        });
+    }
 
-    Ok(0)
+    // Start sending execution events from the given file.
+    let buffer: BufReader<Box<dyn std::io::Read>> = match input {
+        "-" | "/dev/stdin" =>
+            BufReader::new(Box::new(stdin())),
+        _ => {
+            let file = OpenOptions::new().read(true).open(input)
+                .with_context(|| format!("Failed to open file: {}", input))?;
+            BufReader::new(Box::new(file))
+        }
+    };
+
+    for execution in events::from_reader(buffer) {
+        match execution {
+            Ok(value) => {
+                snd.send(value)?;
+            }
+            Err(_error) => {
+                // todo
+                log::error!("")
+            }
+        }
+    }
+    drop(snd);
+
+    Ok(())
 }
 
 fn configure_logging(matches: &ArgMatches) -> Result<()> {

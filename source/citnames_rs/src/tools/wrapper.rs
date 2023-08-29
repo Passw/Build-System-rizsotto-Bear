@@ -17,8 +17,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+use std::path::PathBuf;
 use crate::execution::Execution;
-use crate::tools::{RecognitionResult, Tool};
+use crate::tools::{CompilerCall, RecognitionResult, Semantic, Tool};
+use crate::tools::matchers::source::looks_like_a_source_file;
+use crate::tools::RecognitionResult::{NotRecognized, Recognized};
 
 pub(crate) struct Wrapper {}
 
@@ -29,7 +32,40 @@ impl Wrapper {
 }
 
 impl Tool for Wrapper {
-    fn recognize(&self, _: &Execution) -> RecognitionResult {
-        todo!()
+    // fixme: this is just a quick and dirty implementation.
+    fn recognize(&self, x: &Execution) -> RecognitionResult {
+        if x.executable == PathBuf::from("/usr/bin/g++") {
+            let mut flags = vec![];
+            let mut sources = vec![];
+
+            // find sources and filter out requested flags.
+            for argument in x.arguments.iter().skip(1) {
+                if looks_like_a_source_file(argument.as_str()) {
+                    sources.push(PathBuf::from(argument));
+                } else {
+                    flags.push(argument.clone());
+                }
+            }
+
+            if sources.is_empty() {
+                Recognized(Err(String::from("source file is not found")))
+            } else {
+                Recognized(
+                    Ok(
+                        Semantic::Compiler(
+                            CompilerCall::Compile {
+                                working_dir: x.working_dir.clone(),
+                                compiler: x.executable.clone(),
+                                flags,
+                                sources,
+                                output: None,
+                            }
+                        )
+                    )
+                )
+            }
+        } else {
+            NotRecognized
+        }
     }
 }
