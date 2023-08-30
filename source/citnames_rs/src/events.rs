@@ -32,12 +32,8 @@ pub fn from_reader(reader: impl std::io::Read) -> impl Iterator<Item=Result<Exec
         .into_iter::<Value>()
         .flat_map(|value| {
             match value {
-                Ok(value) => {
-                    match into_execution(value) {
-                        None => None,
-                        Some(result) => Some(Ok(result))
-                    }
-                }
+                Ok(value) =>
+                    into_execution(value).map(Ok),
                 Err(error) =>
                     Some(Err(error)),
             }
@@ -94,8 +90,7 @@ mod test {
 
     #[test]
     fn test_reading_events() {
-        let content = vec![
-            into_single_line(r#"
+        let content = [into_single_line(r#"
             {
               "rid": "17014093296157802240",
               "started": {
@@ -166,8 +161,7 @@ mod test {
               },
               "timestamp": "2023-08-08T12:02:12.773568Z"
             }
-            "#),
-        ]
+            "#)]
             .join("\n");
 
         let mut result = from_reader(content.as_bytes());

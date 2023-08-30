@@ -20,12 +20,21 @@
 use std::collections::HashSet;
 use lazy_static::lazy_static;
 
+#[cfg(target_family = "unix")]
 pub fn looks_like_a_source_file(argument: &str) -> bool {
-    // unix flags
+    // not a command line flag
     if argument.starts_with('-') {
         return false;
     }
-    // windows flags
+    if let Some((_, extension)) = argument.rsplit_once('.') {
+        return EXTENSIONS.contains(extension);
+    }
+    false
+}
+
+#[cfg(target_family = "windows")]
+pub fn looks_like_a_source_file(argument: &str) -> bool {
+    // not a command line flag
     if argument.starts_with('/') {
         return false;
     }
@@ -37,76 +46,35 @@ pub fn looks_like_a_source_file(argument: &str) -> bool {
 
 lazy_static! {
     static ref EXTENSIONS: HashSet<&'static str> = {
-        let mut set = HashSet::new();
-
-        // header files
-        set.insert("h");
-        set.insert("hh");
-        set.insert("H");
-        set.insert("hp");
-        set.insert("hxx");
-        set.insert("hpp");
-        set.insert("HPP");
-        set.insert("h++");
-        set.insert("tcc");
-        // C
-        set.insert("c");
-        set.insert("C");
-        // C++
-        set.insert("cc");
-        set.insert("CC");
-        set.insert("c++");
-        set.insert("C++");
-        set.insert("cxx");
-        set.insert("cpp");
-        set.insert("cp");
-        // CUDA
-        set.insert("cu");
-        // ObjectiveC
-        set.insert("m");
-        set.insert("mi");
-        set.insert("mm");
-        set.insert("M");
-        set.insert("mii");
-        // Preprocessed
-        set.insert("i");
-        set.insert("ii");
-        // Assembly
-        set.insert("s");
-        set.insert("S");
-        set.insert("sx");
-        set.insert("asm");
-        // Fortran
-        set.insert("f");
-        set.insert("for");
-        set.insert("ftn");
-        set.insert("F");
-        set.insert("FOR");
-        set.insert("fpp");
-        set.insert("FPP");
-        set.insert("FTN");
-        set.insert("f90");
-        set.insert("f95");
-        set.insert("f03");
-        set.insert("f08");
-        set.insert("F90");
-        set.insert("F95");
-        set.insert("F03");
-        set.insert("F08");
-        // go
-        set.insert("go");
-        // brig
-        set.insert("brig");
-        // D
-        set.insert("d");
-        set.insert("di");
-        set.insert("dd");
-        // Ada
-        set.insert("ads");
-        set.insert("abd");
-
-        set.shrink_to_fit();
-        set
+        HashSet::from([
+            // header files
+            "h", "hh", "H", "hp", "hxx", "hpp", "HPP", "h++", "tcc",
+            // C
+            "c", "C",
+            // C++
+            "cc", "CC", "c++", "C++", "cxx", "cpp", "cp",
+            // CUDA
+            "cu",
+            // ObjectiveC
+            "m", "mi", "mm", "M", "mii",
+            // Preprocessed
+            "i", "ii",
+            // Assembly
+            "s", "S", "sx", "asm",
+            // Fortran
+            "f", "for", "ftn",
+            "F", "FOR", "fpp", "FPP", "FTN",
+            "f90", "f95", "f03", "f08",
+            "F90", "F95", "F03", "F08",
+            // go
+            "go",
+            // brig
+            "brig",
+            // D
+            "d", "di", "dd",
+            // Ada
+            "ads", "abd"
+        ])
     };
 }
 

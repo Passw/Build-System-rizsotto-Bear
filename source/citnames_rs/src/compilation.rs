@@ -76,8 +76,8 @@ fn into_abspath_opt(path: Option<PathBuf>, root: &Path) -> Result<Option<PathBuf
         .map_or(Ok(None), |v| v.map(Some))
 }
 
-fn into_string(path: &PathBuf) -> Result<String> {
-    path.clone()
+fn into_string(path: &Path) -> Result<String> {
+    path.to_path_buf()
         .into_os_string()
         .into_string()
         .map_err(|_| anyhow!("Path can't be encoded to UTF"))

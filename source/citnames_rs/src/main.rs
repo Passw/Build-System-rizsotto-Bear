@@ -88,9 +88,8 @@ impl Arguments {
                 .clone(),
             config: matches.get_one::<String>("config")
                 .map(String::to_string),
-            append: matches.get_one::<bool>("append")
-                .unwrap_or(&false)
-                .clone(),
+            append: *matches.get_one::<bool>("append")
+                .unwrap_or(&false),
             verbose: matches.get_count("verbose"),
         }
     }

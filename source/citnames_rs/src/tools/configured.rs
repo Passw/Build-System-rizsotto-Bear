@@ -91,6 +91,7 @@ mod test {
 
     use lazy_static::lazy_static;
 
+    use crate::{vec_of_pathbuf, vec_of_strings};
     use crate::tools::Semantic::Compiler;
 
     use super::*;
@@ -99,10 +100,7 @@ mod test {
     fn test_matching() {
         let input = Execution {
             executable: PathBuf::from("/usr/bin/something"),
-            arguments: vec!["something", "-Dthis=that", "-I.", "source.c", "-o", "source.c.o"]
-                .iter()
-                .map(|i| i.to_string())
-                .collect(),
+            arguments: vec_of_strings!["something", "-Dthis=that", "-I.", "source.c", "-o", "source.c.o"],
             working_dir: PathBuf::from("/home/user"),
             environment: HashMap::new(),
         };
@@ -110,11 +108,8 @@ mod test {
         let expected = CompilerCall::Compile {
             working_dir: PathBuf::from("/home/user"),
             compiler: PathBuf::from("/usr/bin/something"),
-            flags: vec!["-Dthis=that", "-o", "source.c.o", "-Wall"]
-                .iter()
-                .map(|i| i.to_string())
-                .collect(),
-            sources: vec![PathBuf::from("source.c")],
+            flags: vec_of_strings!["-Dthis=that", "-o", "source.c.o", "-Wall"],
+            sources: vec_of_pathbuf!["source.c"],
             output: None,
         };
 
@@ -125,10 +120,7 @@ mod test {
     fn test_matching_without_sources() {
         let input = Execution {
             executable: PathBuf::from("/usr/bin/something"),
-            arguments: vec!["something", "--help"]
-                .iter()
-                .map(|i| i.to_string())
-                .collect(),
+            arguments: vec_of_strings!["something", "--help"],
             working_dir: PathBuf::from("/home/user"),
             environment: HashMap::new(),
         };
@@ -140,10 +132,7 @@ mod test {
     fn test_not_matching() {
         let input = Execution {
             executable: PathBuf::from("/usr/bin/cc"),
-            arguments: vec!["cc", "-Dthis=that", "-I.", "source.c", "-o", "source.c.o"]
-                .iter()
-                .map(|i| i.to_string())
-                .collect(),
+            arguments: vec_of_strings!["cc", "-Dthis=that", "-I.", "source.c", "-o", "source.c.o"],
             working_dir: PathBuf::from("/home/user"),
             environment: HashMap::new(),
         };
@@ -155,8 +144,8 @@ mod test {
         static ref SUT: Configured = Configured {
             config: CompilerToRecognize {
                 executable: PathBuf::from("/usr/bin/something"),
-                flags_to_remove: vec![String::from("-I.")],
-                flags_to_add: vec![String::from("-Wall")],
+                flags_to_remove: vec_of_strings!["-I."],
+                flags_to_add: vec_of_strings!["-Wall"],
             }
         };
     }
