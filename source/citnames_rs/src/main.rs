@@ -21,13 +21,13 @@ extern crate core;
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, stdin, stdout};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use anyhow::{anyhow, Context, Result};
-use clap::{arg, ArgAction, ArgMatches, command};
+use clap::{arg, ArgAction, command};
 use crossbeam_channel::{bounded, Sender};
-use json_compilation_db::{Entry, read, write};
+use json_compilation_db::Entry;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 
@@ -44,120 +44,175 @@ mod tools;
 mod filter;
 mod fixtures;
 
-
 fn main() -> Result<()> {
-    let matches = command!()
-        .args(&[
-            arg!(-i --input <FILE> "Path of the event file")
-                .default_value("commands.json")
-                .hide_default_value(false),
-            arg!(-o --output <FILE> "Path of the result file")
-                .default_value("compile_commands.json")
-                .hide_default_value(false),
-            arg!(-c --config <FILE> "Path of the config file"),
-            arg!(-a --append "Append result to an existing output file")
-                .action(ArgAction::SetTrue),
-            arg!(-v --verbose ... "Sets the level of verbosity")
-                .action(ArgAction::Count),
-        ])
-        .get_matches();
-
-    // configure logging
-    configure_logging(&matches)
-        .context("Configure logging from command line arguments.")?;
-
-    // check semantic of the arguments
-    let input = matches.get_one::<String>("input")
-        .map(String::as_str)
-        .expect("input is defaulted");
-    let output = matches.get_one::<String>("output")
-        .map(String::as_str)
-        .expect("output is defaulted");
-    let config = matches.get_one::<String>("config")
-        .map(String::as_str);
-    let append = matches.get_one::<bool>("append")
-        .unwrap_or(&false);
-
-    if input == "-" && config.unwrap_or("+") == "-" {
-        return Err(anyhow!("Both input and config reading the standard input."));
-    }
-    if *append && output == "-" {
-        return Err(anyhow!("Append can't applied to the standard output."));
-    }
-
-    // read configuration
-    let config = match config {
-        Some("-") => {
-            let reader = stdin();
-            serde_json::from_reader(reader)
-                .context("Failed to read configuration from stdin")?
-        }
-        Some(file) => {
-            let reader = OpenOptions::new().read(true).open(file)?;
-            serde_json::from_reader(reader)
-                .with_context(|| format!("Failed to read configuration from file: {}", file))?
-        }
-        None =>
-            Configuration::default(),
-    };
-
-    // todo: When many verbose is requested, should do less parallel in order to debug easier.
-    run(config, input.into(), output.into(), *append)
-}
-
-fn run(config: Configuration, input: String, output: String, append: bool) -> Result<()> {
-    let (snd, rcv) = bounded::<Entry>(32);
-
-    // Start reading entries (in a new thread), and send them across the channel.
-    let (compilation_config, output_config) = (config.compilation, config.output);
-    let captured_output = output.to_owned();
-    thread::spawn(move || {
-        new_entries_from_events(&snd, input.as_str(), &compilation_config)
-            .expect("Failed to process events.");
-
-        if PathBuf::from(&captured_output).is_file() && append {
-            old_entries_from_previous_run(&snd, captured_output.as_str())
-                .expect("Failed to process existing compilation database");
-        }
-        drop(snd);
-    });
-
-    // Start writing the entries (from the channel) to the output.
-    let filter: EntryPredicate = output_config.content.into();
-    let entries = rcv.iter()
-        .inspect(|entry| log::debug!("{:?}", entry))
-        .filter(filter);
-    match output.as_str() {
-        "-" | "/dev/stdout" =>
-            write(stdout(), entries)?,
-        _ => {
-            let temp = format!("{}.tmp", &output);
-            // Create scope for the file, so it will be closed when the scope is over.
-            {
-                let file = File::create(&temp)
-                    .with_context(|| format!("Failed to create file: {}", temp))?;
-                let buffer = BufWriter::new(file);
-                write(buffer, entries)?;
-            }
-            std::fs::rename(&temp, &output)
-                .with_context(|| format!("Failed to rename file from '{}' to '{}'.", temp, output))?;
-        }
-    };
+    let arguments = Arguments::parse().validate()?;
+    let application = Application::configure(arguments)?;
+    application.run()?;
 
     Ok(())
 }
 
-fn old_entries_from_previous_run(sink: &Sender<Entry>, source: &str) -> Result<()> {
+#[derive(Debug, PartialEq)]
+struct Arguments {
+    input: String,
+    output: String,
+    config: Option<String>,
+    append: bool,
+    verbose: u8,
+}
+
+impl Arguments {
+    fn parse() -> Self {
+        let matches = command!()
+            .args(&[
+                arg!(-i --input <FILE> "Path of the event file")
+                    .default_value("commands.json")
+                    .hide_default_value(false),
+                arg!(-o --output <FILE> "Path of the result file")
+                    .default_value("compile_commands.json")
+                    .hide_default_value(false),
+                arg!(-c --config <FILE> "Path of the config file"),
+                arg!(-a --append "Append result to an existing output file")
+                    .action(ArgAction::SetTrue),
+                arg!(-v --verbose ... "Sets the level of verbosity")
+                    .action(ArgAction::Count),
+            ])
+            .get_matches();
+
+        Arguments {
+            input: matches.get_one::<String>("input")
+                .expect("input is defaulted")
+                .clone(),
+            output: matches.get_one::<String>("output")
+                .expect("output is defaulted")
+                .clone(),
+            config: matches.get_one::<String>("config")
+                .map(String::to_string),
+            append: matches.get_one::<bool>("append")
+                .unwrap_or(&false)
+                .clone(),
+            verbose: matches.get_count("verbose"),
+        }
+    }
+
+    fn validate(self) -> Result<Self> {
+        if self.input == "-" && self.config.as_deref() == Some("-") {
+            return Err(anyhow!("Both input and config reading the standard input."));
+        }
+        if self.append && self.output == "-" {
+            return Err(anyhow!("Append can't applied to the standard output."));
+        }
+
+        Ok(self)
+    }
+
+    fn prepare_logging(&self) -> Result<()> {
+        let level = match &self.verbose {
+            0 => LevelFilter::Error,
+            1 => LevelFilter::Warn,
+            2 => LevelFilter::Info,
+            3 => LevelFilter::Debug,
+            _ => LevelFilter::Trace,
+        };
+        let mut logger = SimpleLogger::new()
+            .with_level(level);
+        if level <= LevelFilter::Debug {
+            logger = logger.with_local_timestamps()
+        }
+        logger.init()?;
+
+        Ok(())
+    }
+
+    fn configuration(&self) -> Result<Configuration> {
+        let configuration = match self.config.as_deref() {
+            Some("-") | Some("/dev/stdin") => {
+                let reader = stdin();
+                serde_json::from_reader(reader)
+                    .context("Failed to read configuration from stdin")?
+            }
+            Some(file) => {
+                let reader = OpenOptions::new().read(true).open(file)?;
+                serde_json::from_reader(reader)
+                    .with_context(|| format!("Failed to read configuration from file: {}", file))?
+            }
+            None =>
+                Configuration::default(),
+        };
+        Ok(configuration)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct Application {
+    arguments: Arguments,
+    configuration: Configuration,
+}
+
+impl Application {
+    fn configure(arguments: Arguments) -> Result<Self> {
+        arguments.prepare_logging()?;
+
+        let configuration = arguments.configuration()?;
+
+        Ok(Application { arguments, configuration })
+    }
+
+    fn run(self) -> Result<()> {
+        let (snd, rcv) = bounded::<Entry>(32);
+
+        // Start reading entries (in a new thread), and send them across the channel.
+        let (compilation_config, output_config) =
+            (self.configuration.compilation, self.configuration.output);
+        let output = PathBuf::from(&self.arguments.output);
+        thread::spawn(move || {
+            process_executions(self.arguments.input.as_str(), &compilation_config, &snd)
+                .expect("Failed to process events.");
+
+            if self.arguments.append {
+                copy_entries(output.as_path(), &snd)
+                    .expect("Failed to process existing compilation database");
+            }
+            drop(snd);
+        });
+
+        // Start writing the entries (from the channel) to the output.
+        let filter: EntryPredicate = output_config.content.into();
+        let entries = rcv.iter()
+            .inspect(|entry| log::debug!("{:?}", entry))
+            .filter(filter);
+        match self.arguments.output.as_str() {
+            "-" | "/dev/stdout" =>
+                json_compilation_db::write(stdout(), entries)?,
+            output => {
+                let temp = format!("{}.tmp", output);
+                // Create scope for the file, so it will be closed when the scope is over.
+                {
+                    let file = File::create(&temp)
+                        .with_context(|| format!("Failed to create file: {}", temp))?;
+                    let buffer = BufWriter::new(file);
+                    json_compilation_db::write(buffer, entries)?;
+                }
+                std::fs::rename(&temp, output)
+                    .with_context(|| format!("Failed to rename file from '{}' to '{}'.", temp, output))?;
+            }
+        };
+
+        Ok(())
+    }
+}
+
+fn copy_entries(source: &Path, destination: &Sender<Entry>) -> Result<()> {
     let mut count: u32 = 0;
 
     let file = OpenOptions::new().read(true).open(source)
-        .with_context(|| format!("Failed to open file: {}", source))?;
+        .with_context(|| format!("Failed to open file: {:?}", source))?;
     let buffer = BufReader::new(file);
 
-    for event in read(buffer) {
+    for event in json_compilation_db::read(buffer) {
         match event {
             Ok(value) => {
-                sink.send(value)?;
+                destination.send(value)?;
                 count += 1;
             }
             Err(_error) => {
@@ -171,13 +226,13 @@ fn old_entries_from_previous_run(sink: &Sender<Entry>, source: &str) -> Result<(
     Ok(())
 }
 
-fn new_entries_from_events(sink: &Sender<Entry>, input: &str, config: &Compilation) -> Result<()> {
+fn process_executions(source: &str, config: &Compilation, destination: &Sender<Entry>) -> Result<()> {
     let (snd, rcv) = bounded::<Execution>(128);
 
     // Start worker threads, which will process executions and create compilation database entry.
     for _ in 0..num_cpus::get() {
         let tool: Box<dyn Tool> = config.into();
-        let captured_sink = sink.clone();
+        let captured_sink = destination.clone();
         let captured_source = rcv.clone();
         thread::spawn(move || {
             for execution in captured_source.into_iter() {
@@ -206,12 +261,12 @@ fn new_entries_from_events(sink: &Sender<Entry>, input: &str, config: &Compilati
     }
 
     // Start sending execution events from the given file.
-    let buffer: BufReader<Box<dyn std::io::Read>> = match input {
+    let buffer: BufReader<Box<dyn std::io::Read>> = match source {
         "-" | "/dev/stdin" =>
             BufReader::new(Box::new(stdin())),
         _ => {
-            let file = OpenOptions::new().read(true).open(input)
-                .with_context(|| format!("Failed to open file: {}", input))?;
+            let file = OpenOptions::new().read(true).open(source)
+                .with_context(|| format!("Failed to open file: {}", source))?;
             BufReader::new(Box::new(file))
         }
     };
@@ -228,24 +283,6 @@ fn new_entries_from_events(sink: &Sender<Entry>, input: &str, config: &Compilati
         }
     }
     drop(snd);
-
-    Ok(())
-}
-
-fn configure_logging(matches: &ArgMatches) -> Result<()> {
-    let level = match matches.get_count("verbose") {
-        0 => LevelFilter::Error,
-        1 => LevelFilter::Warn,
-        2 => LevelFilter::Info,
-        3 => LevelFilter::Debug,
-        _ => LevelFilter::Trace,
-    };
-    let mut logger = SimpleLogger::new()
-        .with_level(level);
-    if level <= LevelFilter::Debug {
-        logger = logger.with_local_timestamps()
-    }
-    logger.init()?;
 
     Ok(())
 }
