@@ -21,13 +21,17 @@ use std::path::PathBuf;
 
 use crate::configuration::Compilation;
 use crate::execution::Execution;
+use crate::tools::build::Build;
 use crate::tools::configured::Configured;
 use crate::tools::RecognitionResult::{NotRecognized, Recognized};
+use crate::tools::unix::Unix;
 use crate::tools::wrapper::Wrapper;
 
 mod configured;
 mod wrapper;
 mod matchers;
+mod unix;
+mod build;
 
 /// This abstraction is representing a tool which is known by us.
 pub(crate) trait Tool: Send {
@@ -124,6 +128,8 @@ impl From<&Compilation> for Box<dyn Tool> {
     fn from(value: &Compilation) -> Self {
         // Build the list of known compilers we will recognize by default.
         let mut tools = vec![
+            Unix::new(),
+            Build::new(),
             Wrapper::new(),
         ];
 
@@ -145,6 +151,7 @@ impl From<&Compilation> for Box<dyn Tool> {
 mod test {
     use std::collections::HashMap;
     use std::path::PathBuf;
+
     use crate::vec_of_pathbuf;
 
     use super::*;
