@@ -18,10 +18,11 @@
  */
 
 use std::path::PathBuf;
+use std::vec;
 
 use crate::configuration::CompilerToRecognize;
 use crate::execution::Execution;
-use crate::tools::{CompilerCall, Semantic};
+use crate::tools::{CompilerPass, Semantic};
 use crate::tools::{Any, RecognitionResult, Tool};
 use crate::tools::matchers::source::looks_like_a_source_file;
 use crate::tools::RecognitionResult::{NotRecognized, Recognized};
@@ -67,15 +68,19 @@ impl Tool for Configured {
             } else {
                 Recognized(
                     Ok(
-                        Semantic::Compiler(
-                            CompilerCall::Compile {
-                                working_dir: x.working_dir.clone(),
-                                compiler: x.executable.clone(),
-                                flags,
-                                sources,
-                                output: None,
-                            }
-                        )
+                        Semantic::Compiler {
+                            compiler: x.executable.clone(),
+                            working_dir: x.working_dir.clone(),
+                            passes: sources.iter()
+                                .map(|source| {
+                                    CompilerPass::Compile {
+                                        source: source.clone(),
+                                        output: None,
+                                        flags: flags.clone(),
+                                    }
+                                })
+                                .collect(),
+                        }
                     )
                 )
             }
@@ -91,8 +96,7 @@ mod test {
 
     use lazy_static::lazy_static;
 
-    use crate::{vec_of_pathbuf, vec_of_strings};
-    use crate::tools::Semantic::Compiler;
+    use crate::vec_of_strings;
 
     use super::*;
 
@@ -105,15 +109,19 @@ mod test {
             environment: HashMap::new(),
         };
 
-        let expected = CompilerCall::Compile {
-            working_dir: PathBuf::from("/home/user"),
+        let expected = Semantic::Compiler {
             compiler: PathBuf::from("/usr/bin/something"),
-            flags: vec_of_strings!["-Dthis=that", "-o", "source.c.o", "-Wall"],
-            sources: vec_of_pathbuf!["source.c"],
-            output: None,
+            working_dir: PathBuf::from("/home/user"),
+            passes: vec![
+                CompilerPass::Compile {
+                    flags: vec_of_strings!["-Dthis=that", "-o", "source.c.o", "-Wall"],
+                    source: PathBuf::from("source.c"),
+                    output: None,
+                }
+            ],
         };
 
-        assert_eq!(Recognized(Ok(Compiler(expected))), SUT.recognize(&input));
+        assert_eq!(Recognized(Ok(expected)), SUT.recognize(&input));
     }
 
     #[test]

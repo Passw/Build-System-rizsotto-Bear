@@ -237,9 +237,13 @@ fn process_executions(source: &str, config: &Compilation, destination: &Sender<E
             for execution in captured_source.into_iter() {
                 let result = tool.recognize(&execution);
                 match result {
-                    RecognitionResult::Recognized(Ok(Semantic::Compiler(call))) => {
-                        log::debug!("execution recognized as compiler call, {:?} : {:?}", call, execution);
-                        let entries: Result<Vec<Entry>> = call.try_into();
+                    RecognitionResult::Recognized(Ok(Semantic::UnixCommand)) =>
+                        log::debug!("execution recognized as unix command: {:?}", execution),
+                    RecognitionResult::Recognized(Ok(Semantic::BuildCommand)) =>
+                        log::debug!("execution recognized as build command: {:?}", execution),
+                    RecognitionResult::Recognized(Ok(semantic)) => {
+                        log::debug!("execution recognized as compiler call, {:?} : {:?}", semantic, execution);
+                        let entries: Result<Vec<Entry>> = semantic.try_into();
                         match entries {
                             Ok(entries) => for entry in entries {
                                 captured_sink.send(entry).expect("")
@@ -248,8 +252,6 @@ fn process_executions(source: &str, config: &Compilation, destination: &Sender<E
                                 log::debug!("can't convert into compilation entry: {}", error),
                         }
                     }
-                    RecognitionResult::Recognized(Ok(_)) =>
-                        log::debug!("execution recognized: {:?}", execution),
                     RecognitionResult::Recognized(Err(reason)) =>
                         log::debug!("execution recognized with failure, {:?} : {:?}", reason, execution),
                     RecognitionResult::NotRecognized =>

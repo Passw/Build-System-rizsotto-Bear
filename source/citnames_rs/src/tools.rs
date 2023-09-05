@@ -49,22 +49,23 @@ pub(crate) enum RecognitionResult {
 /// Represents an executed command semantic.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Semantic {
-    Compiler(CompilerCall),
     UnixCommand,
     BuildCommand,
+    Compiler {
+        compiler: PathBuf,
+        working_dir: PathBuf,
+        passes: Vec<CompilerPass>,
+    },
 }
 
 /// Represents a compiler call.
 #[derive(Debug, PartialEq)]
-pub(crate) enum CompilerCall {
-    Query,
+pub(crate) enum CompilerPass {
     Preprocess,
     Compile {
-        working_dir: PathBuf,
-        compiler: PathBuf,
-        flags: Vec<String>,
-        sources: Vec<PathBuf>,
+        source: PathBuf,
         output: Option<PathBuf>,
+        flags: Vec<String>,
     },
 }
 
@@ -256,7 +257,7 @@ mod test {
         fn recognize(&self, _: &Execution) -> RecognitionResult {
             match self {
                 MockTool::Recognize =>
-                    Recognized(Ok(Semantic::Compiler(CompilerCall::Query))),
+                    Recognized(Ok(Semantic::UnixCommand)),
                 MockTool::RecognizeFailed =>
                     Recognized(Err(String::from("problem"))),
                 MockTool::NotRecognize =>

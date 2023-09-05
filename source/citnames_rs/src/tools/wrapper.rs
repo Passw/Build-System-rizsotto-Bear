@@ -18,8 +18,9 @@
  */
 
 use std::path::PathBuf;
+
 use crate::execution::Execution;
-use crate::tools::{CompilerCall, RecognitionResult, Semantic, Tool};
+use crate::tools::{CompilerPass, RecognitionResult, Semantic, Tool};
 use crate::tools::matchers::source::looks_like_a_source_file;
 use crate::tools::RecognitionResult::{NotRecognized, Recognized};
 
@@ -52,15 +53,19 @@ impl Tool for Wrapper {
             } else {
                 Recognized(
                     Ok(
-                        Semantic::Compiler(
-                            CompilerCall::Compile {
-                                working_dir: x.working_dir.clone(),
-                                compiler: x.executable.clone(),
-                                flags,
-                                sources,
-                                output: None,
-                            }
-                        )
+                        Semantic::Compiler {
+                            compiler: x.executable.clone(),
+                            working_dir: x.working_dir.clone(),
+                            passes: sources.iter()
+                                .map(|source| {
+                                    CompilerPass::Compile {
+                                        source: source.clone(),
+                                        output: None,
+                                        flags: flags.clone(),
+                                    }
+                                })
+                                .collect(),
+                        }
                     )
                 )
             }
