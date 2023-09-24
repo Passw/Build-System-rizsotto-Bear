@@ -21,7 +21,9 @@ crossbeam-channel = "0.5"
 json_compilation_db = "1.0"
 log = "0.4"
 simple_logger = { version = "4.2", default-features = false, features = ["timestamps"]}
-clap = { version = "4.3", default-features = false, features = ["std", "cargo", "help", "usage", "suggestions"] }
+clap = { version = "4.4", default-features = false, features = ["std", "cargo", "help", "usage", "suggestions"] }
+nom = "7.1"
+regex = "1.9"
 
 [[bin]]
 name = "citnames"

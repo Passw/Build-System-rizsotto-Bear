@@ -32,6 +32,7 @@ mod wrapper;
 mod matchers;
 mod unix;
 mod build;
+mod gcc;
 
 /// This abstraction is representing a tool which is known by us.
 pub(crate) trait Tool: Send {
