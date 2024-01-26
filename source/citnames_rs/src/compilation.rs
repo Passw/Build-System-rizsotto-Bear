@@ -36,28 +36,15 @@ impl TryFrom<Semantic> for Vec<Entry> {
                         match pass {
                             CompilerPass::Preprocess =>
                                 Err(anyhow!("preprocess pass should not show up in results")),
-                            CompilerPass::Compile { source, output, flags } => {
-                                let mut arguments: Vec<String> = vec![];
-                                // Assemble the arguments as it would be for a single source file.
-                                arguments.push(into_string(&compiler)?);
-                                for flag in flags {
-                                    arguments.push(flag.clone());
-                                }
-                                if let Some(file) = &output {
-                                    arguments.push(String::from("-o"));
-                                    arguments.push(into_string(file)?)
-                                }
-                                arguments.push(into_string(source)?);
-
+                            CompilerPass::Compile { source, output, flags } =>
                                 Ok(
                                     Entry {
                                         file: into_abspath(source.clone(), working_dir.as_path())?,
                                         directory: working_dir.clone(),
                                         output: into_abspath_opt(output.clone(), working_dir.as_path())?,
-                                        arguments: arguments.clone(),
+                                        arguments: into_arguments(&compiler, source, output, flags)?,
                                     }
                                 )
-                            }
                         }
                     })
                     .collect();
@@ -68,6 +55,26 @@ impl TryFrom<Semantic> for Vec<Entry> {
                 Ok(vec![]),
         }
     }
+}
+
+fn into_arguments(
+    compiler: &PathBuf,
+    source: &PathBuf,
+    output: &Option<PathBuf>,
+    flags: &Vec<String>,
+) -> Result<Vec<String>, anyhow::Error> {
+    let mut arguments: Vec<String> = vec![];
+    // Assemble the arguments as it would be for a single source file.
+    arguments.push(into_string(&compiler)?);
+    for flag in flags {
+        arguments.push(flag.clone());
+    }
+    if let Some(file) = output {
+        arguments.push(String::from("-o"));
+        arguments.push(into_string(file)?)
+    }
+    arguments.push(into_string(source)?);
+    Ok(arguments)
 }
 
 fn into_abspath(path: PathBuf, root: &Path) -> Result<PathBuf, std::io::Error> {
@@ -81,7 +88,7 @@ fn into_abspath(path: PathBuf, root: &Path) -> Result<PathBuf, std::io::Error> {
 
 fn into_abspath_opt(path: Option<PathBuf>, root: &Path) -> Result<Option<PathBuf>, std::io::Error> {
     path.map(|v| into_abspath(v, root))
-        .map_or(Ok(None), |v| v.map(Some))
+        .transpose()
 }
 
 fn into_string(path: &Path) -> Result<String> {
