@@ -45,7 +45,9 @@ mod filter;
 mod fixtures;
 
 fn main() -> Result<()> {
-    let arguments = Arguments::parse().validate()?;
+    let arguments = Arguments::parse()?;
+    prepare_logging(arguments.verbose)?;
+
     let application = Application::configure(arguments)?;
     application.run()?;
 
@@ -62,7 +64,7 @@ struct Arguments {
 }
 
 impl Arguments {
-    fn parse() -> Self {
+    fn parse() -> Result<Self> {
         let matches = command!()
             .args(&[
                 arg!(-i --input <FILE> "Path of the event file")
@@ -92,6 +94,7 @@ impl Arguments {
                 .unwrap_or(&false),
             verbose: matches.get_count("verbose"),
         }
+            .validate()
     }
 
     fn validate(self) -> Result<Self> {
@@ -104,57 +107,64 @@ impl Arguments {
 
         Ok(self)
     }
+}
 
-    fn prepare_logging(&self) -> Result<()> {
-        let level = match &self.verbose {
-            0 => LevelFilter::Error,
-            1 => LevelFilter::Warn,
-            2 => LevelFilter::Info,
-            3 => LevelFilter::Debug,
-            _ => LevelFilter::Trace,
-        };
-        let mut logger = SimpleLogger::new()
-            .with_level(level);
-        if level <= LevelFilter::Debug {
-            logger = logger.with_local_timestamps()
+fn prepare_logging(level: u8) -> Result<()> {
+    let level = match level {
+        0 => LevelFilter::Error,
+        1 => LevelFilter::Warn,
+        2 => LevelFilter::Info,
+        3 => LevelFilter::Debug,
+        _ => LevelFilter::Trace,
+    };
+    let mut logger = SimpleLogger::new()
+        .with_level(level);
+    if level <= LevelFilter::Debug {
+        logger = logger.with_local_timestamps()
+    }
+    logger.init()?;
+
+    Ok(())
+}
+
+fn read_configuration(file: &Option<String>) -> Result<Configuration> {
+    let configuration = match file.as_deref() {
+        Some("-") | Some("/dev/stdin") => {
+            let reader = stdin();
+            serde_json::from_reader(reader)
+                .context("Failed to read configuration from stdin")?
         }
-        logger.init()?;
-
-        Ok(())
-    }
-
-    fn configuration(&self) -> Result<Configuration> {
-        let configuration = match self.config.as_deref() {
-            Some("-") | Some("/dev/stdin") => {
-                let reader = stdin();
-                serde_json::from_reader(reader)
-                    .context("Failed to read configuration from stdin")?
-            }
-            Some(file) => {
-                let reader = OpenOptions::new().read(true).open(file)?;
-                serde_json::from_reader(reader)
-                    .with_context(|| format!("Failed to read configuration from file: {}", file))?
-            }
-            None =>
-                Configuration::default(),
-        };
-        Ok(configuration)
-    }
+        Some(file) => {
+            let reader = OpenOptions::new().read(true).open(file)?;
+            serde_json::from_reader(reader)
+                .with_context(|| format!("Failed to read configuration from file: {}", file))?
+        }
+        None =>
+            Configuration::default(),
+    };
+    Ok(configuration)
 }
 
 #[derive(Debug, PartialEq)]
 struct Application {
-    arguments: Arguments,
+    input: String,
+    output: String,
+    append: bool,
     configuration: Configuration,
 }
 
 impl Application {
     fn configure(arguments: Arguments) -> Result<Self> {
-        arguments.prepare_logging()?;
+        let configuration = read_configuration(&arguments.config)?;
 
-        let configuration = arguments.configuration()?;
-
-        Ok(Application { arguments, configuration })
+        Ok(
+            Application {
+                input: arguments.input,
+                output: arguments.output,
+                append: arguments.append,
+                configuration,
+            }
+        )
     }
 
     fn run(self) -> Result<()> {
@@ -163,12 +173,12 @@ impl Application {
         // Start reading entries (in a new thread), and send them across the channel.
         let (compilation_config, output_config) =
             (self.configuration.compilation, self.configuration.output);
-        let output = PathBuf::from(&self.arguments.output);
+        let output = PathBuf::from(&self.output);
         thread::spawn(move || {
-            process_executions(self.arguments.input.as_str(), &compilation_config, &snd)
+            process_executions(self.input.as_str(), &compilation_config, &snd)
                 .expect("Failed to process events.");
 
-            if self.arguments.append {
+            if self.append {
                 copy_entries(output.as_path(), &snd)
                     .expect("Failed to process existing compilation database");
             }
@@ -180,7 +190,7 @@ impl Application {
         let entries = rcv.iter()
             .inspect(|entry| log::debug!("{:?}", entry))
             .filter(filter);
-        match self.arguments.output.as_str() {
+        match self.output.as_str() {
             "-" | "/dev/stdout" =>
                 json_compilation_db::write(stdout(), entries)?,
             output => {
