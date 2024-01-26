@@ -20,18 +20,17 @@
 extern crate core;
 
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, stdin, stdout};
-use std::path::{Path, PathBuf};
-use std::thread;
+use std::io::{BufReader, BufWriter, Read, stdin, stdout};
+use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 use clap::{arg, ArgAction, command};
-use crossbeam_channel::{bounded, Sender};
 use json_compilation_db::Entry;
 use log::LevelFilter;
+use serde_json::Error;
 use simple_logger::SimpleLogger;
 
-use crate::configuration::{Compilation, Configuration};
+use crate::configuration::Configuration;
 use crate::execution::Execution;
 use crate::filter::EntryPredicate;
 use crate::tools::{RecognitionResult, Semantic, Tool};
@@ -168,31 +167,33 @@ impl Application {
     }
 
     fn run(self) -> Result<()> {
-        let (snd, rcv) = bounded::<Entry>(32);
-
-        // Start reading entries (in a new thread), and send them across the channel.
-        let (compilation_config, output_config) =
-            (self.configuration.compilation, self.configuration.output);
-        let output = PathBuf::from(&self.output);
-        thread::spawn(move || {
-            process_executions(self.input.as_str(), &compilation_config, &snd)
-                .expect("Failed to process events.");
-
-            if self.append {
-                copy_entries(output.as_path(), &snd)
-                    .expect("Failed to process existing compilation database");
-            }
-            drop(snd);
-        });
-
-        // Start writing the entries (from the channel) to the output.
-        let filter: EntryPredicate = output_config.content.into();
-        let entries = rcv.iter()
+        let filter: EntryPredicate = self.configuration.output.content.clone().into();
+        let entries = self.create_entries()?
             .inspect(|entry| log::debug!("{:?}", entry))
             .filter(filter);
+        self.write_entries(entries)?;
+
+        Ok(())
+    }
+
+    fn create_entries(&self) -> Result<Box<dyn Iterator<Item=Entry>>> {
+        let tool: Box<dyn Tool> = (&self.configuration.compilation).into();
+        let from_events = entries_from_execution_events(self.input.as_str(), tool)?;
+        // Based on the append flag, we should read the existing compilation database too.
+        if self.append {
+            let from_db = entries_from_compilation_db(Path::new(&self.output))?;
+            Ok(Box::new(from_events.chain(from_db)))
+        } else {
+            Ok(Box::new(from_events))
+        }
+    }
+
+    fn write_entries(&self, entries: impl Iterator<Item=Entry>) -> Result<(), anyhow::Error> {
         match self.output.as_str() {
-            "-" | "/dev/stdout" =>
-                json_compilation_db::write(stdout(), entries)?,
+            "-" | "/dev/stdout" => {
+                let buffer = BufWriter::new(stdout());
+                json_compilation_db::write(buffer, entries)?
+            }
             output => {
                 let temp = format!("{}.tmp", output);
                 // Create scope for the file, so it will be closed when the scope is over.
@@ -211,68 +212,8 @@ impl Application {
     }
 }
 
-fn copy_entries(source: &Path, destination: &Sender<Entry>) -> Result<()> {
-    let mut count: u32 = 0;
-
-    let file = OpenOptions::new().read(true).open(source)
-        .with_context(|| format!("Failed to open file: {:?}", source))?;
-    let buffer = BufReader::new(file);
-
-    for event in json_compilation_db::read(buffer) {
-        match event {
-            Ok(value) => {
-                destination.send(value)?;
-                count += 1;
-            }
-            Err(_error) => {
-                // todo
-                log::error!("")
-            }
-        }
-    }
-
-    log::debug!("Found {count} entries from previous run.");
-    Ok(())
-}
-
-fn process_executions(source: &str, config: &Compilation, destination: &Sender<Entry>) -> Result<()> {
-    let (snd, rcv) = bounded::<Execution>(128);
-
-    // Start worker threads, which will process executions and create compilation database entry.
-    for _ in 0..num_cpus::get() {
-        let tool: Box<dyn Tool> = config.into();
-        let captured_sink = destination.clone();
-        let captured_source = rcv.clone();
-        thread::spawn(move || {
-            for execution in captured_source.into_iter() {
-                let result = tool.recognize(&execution);
-                match result {
-                    RecognitionResult::Recognized(Ok(Semantic::UnixCommand)) =>
-                        log::debug!("execution recognized as unix command: {:?}", execution),
-                    RecognitionResult::Recognized(Ok(Semantic::BuildCommand)) =>
-                        log::debug!("execution recognized as build command: {:?}", execution),
-                    RecognitionResult::Recognized(Ok(semantic)) => {
-                        log::debug!("execution recognized as compiler call, {:?} : {:?}", semantic, execution);
-                        let entries: Result<Vec<Entry>> = semantic.try_into();
-                        match entries {
-                            Ok(entries) => for entry in entries {
-                                captured_sink.send(entry).expect("")
-                            }
-                            Err(error) =>
-                                log::debug!("can't convert into compilation entry: {}", error),
-                        }
-                    }
-                    RecognitionResult::Recognized(Err(reason)) =>
-                        log::debug!("execution recognized with failure, {:?} : {:?}", reason, execution),
-                    RecognitionResult::NotRecognized =>
-                        log::debug!("execution not recognized: {:?}", execution),
-                }
-            }
-        });
-    }
-
-    // Start sending execution events from the given file.
-    let buffer: BufReader<Box<dyn std::io::Read>> = match source {
+fn entries_from_execution_events(source: &str, tool: Box<dyn Tool>) -> Result<impl Iterator<Item=Entry>> {
+    let reader: BufReader<Box<dyn Read>> = match source {
         "-" | "/dev/stdin" =>
             BufReader::new(Box::new(stdin())),
         _ => {
@@ -281,19 +222,73 @@ fn process_executions(source: &str, config: &Compilation, destination: &Sender<E
             BufReader::new(Box::new(file))
         }
     };
+    let entries = events::from_reader(reader)
+        .flat_map(failed_execution_read_logged)
+        .flat_map(move |execution| execution_into_semantic(tool.as_ref(), execution))
+        .flat_map(semantic_into_entries);
 
-    for execution in events::from_reader(buffer) {
-        match execution {
-            Ok(value) => {
-                snd.send(value)?;
-            }
-            Err(_error) => {
-                // todo
-                log::error!("")
-            }
+    Ok(entries)
+}
+
+fn failed_execution_read_logged(candidate: Result<Execution, Error>) -> Option<Execution> {
+    match candidate {
+        Ok(execution) => Some(execution),
+        Err(error) => {
+            log::error!("Failed to read entry: {}", error);
+            None
         }
     }
-    drop(snd);
+}
 
-    Ok(())
+fn execution_into_semantic(tool: &dyn Tool, execution: Execution) -> Option<Semantic> {
+    match tool.recognize(&execution) {
+        RecognitionResult::Recognized(Ok(Semantic::UnixCommand)) => {
+            log::debug!("execution recognized as unix command: {:?}", execution);
+            None
+        }
+        RecognitionResult::Recognized(Ok(Semantic::BuildCommand)) => {
+            log::debug!("execution recognized as build command: {:?}", execution);
+            None
+        }
+        RecognitionResult::Recognized(Ok(semantic)) => {
+            log::debug!("execution recognized as compiler call, {:?} : {:?}", semantic, execution);
+            Some(semantic)
+        }
+        RecognitionResult::Recognized(Err(reason)) => {
+            log::debug!("execution recognized with failure, {:?} : {:?}", reason, execution);
+            None
+        }
+        RecognitionResult::NotRecognized => {
+            log::debug!("execution not recognized: {:?}", execution);
+            None
+        }
+    }
+}
+
+fn semantic_into_entries(semantic: Semantic) -> Vec<Entry> {
+    let entries: Result<Vec<Entry>, anyhow::Error> = semantic.try_into();
+    entries.unwrap_or_else(|error| {
+        log::debug!("compiler call failed to convert to compilation db entry: {}", error);
+        vec![]
+    })
+}
+
+fn entries_from_compilation_db(source: &Path) -> Result<impl Iterator<Item=Entry>> {
+    let file = OpenOptions::new().read(true).open(source)
+        .with_context(|| format!("Failed to open file: {:?}", source))?;
+    let buffer = BufReader::new(file);
+    let entries = json_compilation_db::read(buffer)
+        .flat_map(failed_entry_read_logged);
+
+    Ok(entries)
+}
+
+fn failed_entry_read_logged(candidate: Result<Entry, Error>) -> Option<Entry> {
+    match candidate {
+        Ok(entry) => Some(entry),
+        Err(error) => {
+            log::error!("Failed to read entry: {}", error);
+            None
+        }
+    }
 }

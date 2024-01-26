@@ -15,9 +15,6 @@ lazy_static = "1.4"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["std"] }
 path-absolutize = "3.1"
-num_cpus = "1.16"
-crossbeam = "0.8"
-crossbeam-channel = "0.5"
 json_compilation_db = "1.0"
 log = "0.4"
 simple_logger = { version = "4.2", default-features = false, features = ["timestamps"]}
