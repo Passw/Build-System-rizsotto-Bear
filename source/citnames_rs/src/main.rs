@@ -167,7 +167,7 @@ impl Application {
     }
 
     fn run(self) -> Result<()> {
-        let filter: EntryPredicate = self.configuration.output.content.clone().into();
+        let filter: EntryPredicate = (&self.configuration.output.content).into();
         let entries = self.create_entries()?
             .inspect(|entry| log::debug!("{:?}", entry))
             .filter(filter);

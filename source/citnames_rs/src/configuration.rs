@@ -44,7 +44,7 @@ pub struct Compilation {
 // When executable name matches it tries to parse the flags as it would
 // be a known compiler, and append the additional flags to the output
 // entry if the compiler is recognized.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct CompilerToRecognize {
     pub executable: PathBuf,
     #[serde(default)]
@@ -90,7 +90,7 @@ impl Default for Format {
 // This will act as a filter on the output elements.
 // These attributes can be read from the configuration file, and can be
 // overridden by command line arguments.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct Content {
     #[serde(default = "disabled")]
     pub include_only_existing_source: bool,
@@ -122,7 +122,7 @@ fn enabled() -> bool {
 }
 
 /// Represents how the duplicate filtering detects duplicate entries.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Debug, Default, Deserialize, PartialEq)]
 #[serde(try_from = "String")]
 pub enum DuplicateFilterFields {
     FileOnly,

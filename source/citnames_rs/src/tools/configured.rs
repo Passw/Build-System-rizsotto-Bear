@@ -28,12 +28,20 @@ use crate::tools::matchers::source::looks_like_a_source_file;
 use crate::tools::RecognitionResult::{NotRecognized, Recognized};
 
 pub(crate) struct Configured {
-    config: CompilerToRecognize,
+    pub executable: PathBuf,
+    pub flags_to_add: Vec<String>,
+    pub flags_to_remove: Vec<String>,
 }
 
 impl Configured {
     pub(crate) fn new(config: &CompilerToRecognize) -> Box<dyn Tool> {
-        Box::new(Configured { config: config.clone() })
+        Box::new(
+            Configured {
+                executable: config.executable.clone(),
+                flags_to_add: config.flags_to_add.clone(),
+                flags_to_remove: config.flags_to_remove.clone(),
+            }
+        )
     }
 
     pub(crate) fn from(configs: &[CompilerToRecognize]) -> Box<dyn Tool> {
@@ -44,13 +52,13 @@ impl Configured {
 impl Tool for Configured {
     /// Any of the tool recognize the semantic, will be returned as result.
     fn recognize(&self, x: &Execution) -> RecognitionResult {
-        if x.executable == self.config.executable {
+        if x.executable == self.executable {
             let mut flags = vec![];
             let mut sources = vec![];
 
             // find sources and filter out requested flags.
             for argument in x.arguments.iter().skip(1) {
-                if self.config.flags_to_remove.contains(argument) {
+                if self.flags_to_remove.contains(argument) {
                     continue;
                 } else if looks_like_a_source_file(argument.as_str()) {
                     sources.push(PathBuf::from(argument));
@@ -59,7 +67,7 @@ impl Tool for Configured {
                 }
             }
             // extend flags with requested flags.
-            for flag in &self.config.flags_to_add {
+            for flag in &self.flags_to_add {
                 flags.push(flag.clone());
             }
 
@@ -150,11 +158,9 @@ mod test {
 
     lazy_static! {
         static ref SUT: Configured = Configured {
-            config: CompilerToRecognize {
-                executable: PathBuf::from("/usr/bin/something"),
-                flags_to_remove: vec_of_strings!["-I."],
-                flags_to_add: vec_of_strings!["-Wall"],
-            }
+            executable: PathBuf::from("/usr/bin/something"),
+            flags_to_remove: vec_of_strings!["-I."],
+            flags_to_add: vec_of_strings!["-Wall"],
         };
     }
 }

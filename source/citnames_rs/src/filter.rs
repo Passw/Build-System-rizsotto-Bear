@@ -28,12 +28,12 @@ use crate::configuration::{Content, DuplicateFilterFields};
 
 pub(crate) type EntryPredicate = Box<dyn FnMut(&Entry) -> bool>;
 
-impl From<Content> for EntryPredicate {
-    fn from(val: Content) -> Self {
+impl From<&Content> for EntryPredicate {
+    fn from(val: &Content) -> Self {
         let source_check = EntryPredicateBuilder::source_check(val.include_only_existing_source);
-        let paths_to_include = EntryPredicateBuilder::contains(val.paths_to_include);
-        let paths_to_exclude = EntryPredicateBuilder::contains(val.paths_to_exclude);
-        let duplicates = EntryPredicateBuilder::duplicates(val.duplicate_filter_fields);
+        let paths_to_include = EntryPredicateBuilder::contains(val.paths_to_include.as_slice());
+        let paths_to_exclude = EntryPredicateBuilder::contains(val.paths_to_exclude.as_slice());
+        let duplicates = EntryPredicateBuilder::duplicates(&val.duplicate_filter_fields);
 
         (!paths_to_exclude & paths_to_include & source_check & duplicates).build()
     }
@@ -61,18 +61,19 @@ impl EntryPredicateBuilder {
         }
     }
 
-    fn contains(paths: Vec<PathBuf>) -> Self {
+    fn contains(paths: &[PathBuf]) -> Self {
         if paths.is_empty() {
             EntryPredicateBuilder { predicate_opt: None }
         } else {
+            let paths_copy = paths.to_vec();
             let predicate: EntryPredicate = Box::new(move |entry| {
-                paths.iter().any(|path| { entry.file.starts_with(path) })
+                paths_copy.iter().any(|path| { entry.file.starts_with(path) })
             });
             EntryPredicateBuilder { predicate_opt: Some(predicate) }
         }
     }
 
-    fn duplicates(config: DuplicateFilterFields) -> Self {
+    fn duplicates(config: &DuplicateFilterFields) -> Self {
         let hash_function: fn(&Entry) -> u64 = config.into();
         let mut have_seen = HashSet::new();
 
@@ -158,8 +159,8 @@ impl DuplicateFilterFields {
     }
 }
 
-impl From<DuplicateFilterFields> for fn(&Entry) -> u64 {
-    fn from(val: DuplicateFilterFields) -> Self {
+impl From<&DuplicateFilterFields> for fn(&Entry) -> u64 {
+    fn from(val: &DuplicateFilterFields) -> Self {
         match val {
             DuplicateFilterFields::FileOnly =>
                 DuplicateFilterFields::hash_source,
@@ -214,7 +215,7 @@ mod test {
             },
         ];
 
-        let sut: EntryPredicate = Content::default().into();
+        let sut: EntryPredicate = (&Content::default()).into();
         let result: Vec<Entry> = input.into_iter().filter(sut).collect();
         assert_eq!(expected, result);
     }
@@ -279,7 +280,7 @@ mod test {
                 },
             ];
 
-            let sut: EntryPredicate = config.into();
+            let sut: EntryPredicate = (&config).into();
             let result: Vec<Entry> = input.into_iter().filter(sut).collect();
             assert_eq!(expected, result);
         }
